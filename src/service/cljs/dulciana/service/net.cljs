@@ -7,11 +7,10 @@
             [ajax.core :as ajax]
             [taoensso.timbre :as log :include-macros true]
             [dulciana.service.parser :as parser]
-            [dulciana.service.messages :as messages]))
-
-(def os (nodejs/require "os"))
-(def dgram (nodejs/require "dgram"))
-(def url (nodejs/require "url"))
+            [dulciana.service.messages :as messages]
+            [os :as os]
+            [dgram :as dgram]
+            [url :as url]))
 
 ;;; Define SSDP protocol networking constants:
 (def ssdp-mcast-addresses {"IPv4" "239.255.255.250"
@@ -27,7 +26,7 @@
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
   []
   (filter #(not (% :internal))
-          (flatten (map (fn [[k v]] v) (js->clj (os.networkInterfaces) :keywordize-keys true)))))
+          (flatten (map (fn [[k v]] v) (js->clj (os/networkInterfaces) :keywordize-keys true)))))
 
 ;;; Multicast message sender:
 (defn send-ssdp-message
@@ -85,7 +84,7 @@
                                                                  :message %}))}))
 
 (defn get-service-descriptor [device-announcement service-info]
-  (let [scpdurl (url.resolve ((-> device-announcement :message :headers) "location") (service-info :SCPDURL))]
+  (let [scpdurl (url/resolve ((-> device-announcement :message :headers) "location") (service-info :SCPDURL))]
     (ajax/GET scpdurl
               {:handler #(go (>! @parser/descriptor-channel {:announcement device-announcement
                                                              :service-info service-info
@@ -109,7 +108,7 @@
 (defn start-listener
   "Creates a new multicast socket on the supplied interface."
   [iface]
-  (let [socket (dgram.createSocket (ssdp-protocols (iface :family)))]
+  (let [socket (dgram/createSocket (ssdp-protocols (iface :family)))]
     (.on socket "error" (partial handle-ssdp-error iface socket))
     (.on socket "message" (partial handle-ssdp-message iface socket))
     (.on socket "close" (partial handle-ssdp-socket-close iface socket))

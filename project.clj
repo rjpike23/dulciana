@@ -38,7 +38,13 @@
                                     :output-to "target/fig-service/dulciana_figwheel.js"
                                     :target :nodejs
                                     :optimizations :none
-                                    :source-map true}}
+                                    :source-map true
+                                    :install-deps true
+                                    :npm-deps {:express "4.15.3"
+                                               :source-map-support "0.5.0"
+                                               :ws "3.2.0"
+                                               :sax "1.2.2"
+                                               "@pupeno/xmlhttprequest" "1.7.0"}}}
                         {:id "fig-client"
                          :source-paths ["src/client/cljs"]
                          :figwheel true
@@ -47,6 +53,8 @@
                                     :output-to "target/fig-client/dulciana_figwheel.js"
                                     :asset-path "resources/fig-client"
                                     :optimizations :none
-                                    :source-map true}}]}
+                                    :source-map true
+                                    :npm-deps {:react "15.6.0"
+                                               :react-dom "15.6.0"}}}]}
   :figwheel {}
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]})

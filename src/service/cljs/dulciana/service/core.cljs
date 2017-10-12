@@ -5,14 +5,12 @@
             [dulciana.service.net :as net]
             [dulciana.service.parser :as parser]
             [dulciana.service.state :as state]
-            [dulciana.service.messages :as msg]))
+            [dulciana.service.messages :as msg]
+            [express :as express]
+            [http :as http]
+            [source-map-support :as sms]))
 
 (nodejs/enable-util-print!)
-
-
-(. (nodejs/require "source-map-support") install)
-(defonce express (nodejs/require "express"))
-(defonce http (nodejs/require "http"))
 
 (defonce http-server (atom nil))
 
