@@ -1,2 +1,5 @@
 node_modules/
 target/
+.nrepl-port
+figwheel_server.log
+*~

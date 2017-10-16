@@ -3,16 +3,11 @@
   :url "http://www.dulciana.net"
   :license {:name "I dunno"
             :url "http://www.license.net/"}
-  ;; :mirrors {"central" {:name "Nexus"
-  ;;                      :url "http://nexus.localdomain:8081/repository/maven-public"
-  ;;                      :repo-manager true}
-  ;;           #"clojars" {:name "Nexus"
-  ;;                       :url "http://nexus.localdomain:8081/repository/maven-public"
-  ;;                       :repo-manager true}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.9.946"]
                  [org.clojure/core.async "0.3.443"]
                  [org.clojure/data.xml "0.2.0-alpha2"]
+                 [binaryage/devtools "0.9.7"]
                  [lein-cljsbuild "1.1.6"]
                  [com.cemerick/piggieback "0.2.1"]
                  [lein-figwheel "0.5.14"]
@@ -54,6 +49,7 @@
                                     :asset-path "resources/fig-client"
                                     :optimizations :none
                                     :source-map true
+                                    :install-deps true
                                     :npm-deps {:react "15.6.0"
                                                :react-dom "15.6.0"}}}]}
   :figwheel {}
