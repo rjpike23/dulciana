@@ -2,5 +2,6 @@
   (:require [re-frame.core :as rf]))
 
 (def initial-state
-  {:devices {}
-   :services {}})
+  {:remote {:devices {}
+            :services {}}
+   :ui {:active-view :all-devices}})

@@ -8,11 +8,16 @@
    {:db db/initial-state}))
 
 (rf/reg-event-db
+ :change-view
+ (fn [db [_ view]]
+   (assoc-in db [:ui :active-view] view)))
+
+(rf/reg-event-db
  :devices-received
  (fn [db [_ devs]]
-   (assoc db :devices devs)))
+   (assoc-in db [:remote :devices] devs)))
 
 (rf/reg-event-db
  :services-received
  (fn [db [_ svcs]]
-   (assoc db :services svcs)))
+   (assoc-in db [:remote :services] svcs)))

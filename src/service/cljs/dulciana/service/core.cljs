@@ -29,7 +29,7 @@
                    [:script {:src "https://code.jquery.com/jquery-3.2.1.slim.min.js"}]
                    [:script {:src "https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.11.0/umd/popper.min.js"}]
                    [:script {:src "https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/js/bootstrap.min.js"}]
-                   [:script {:src "resources/fig-client/dulciana_figwheel.js"
+                   [:script {:src "/resources/fig-client/dulciana_figwheel.js"
                              :type "text/javascript"}]]]))
 
 (def app (express))
@@ -47,7 +47,7 @@
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str (@state/remote-services (.-svcid (.-params req)))))))))
-(. app (get "/"
+(. app (get "/*"
             (fn [req res]
               (. res (set "Access-Control-Allow-Origin" "*"))
               (. res (send (template))))))

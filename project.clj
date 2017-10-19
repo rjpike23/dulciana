@@ -46,7 +46,7 @@
                          :compiler {:main dulciana.client.core
                                     :output-dir "target/fig-client"
                                     :output-to "target/fig-client/dulciana_figwheel.js"
-                                    :asset-path "resources/fig-client"
+                                    :asset-path "/resources/fig-client"
                                     :optimizations :none
                                     :source-map true
                                     :install-deps true
