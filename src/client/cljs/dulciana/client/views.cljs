@@ -5,7 +5,8 @@
 (defn device-row-component [row]
   [:div.col-md
    [:div.card {:key (-> row :device :UDN)}
-    [:button.card-title.btn.btn-primary {:on-click #(secretary/dispatch! (str "/ssdp/device/" (-> row :device :UDN)))}
+    [:button.card-title.btn.btn-primary
+     {:on-click #(.setToken dulciana.client.core/history (str "upnp/device/" (-> row :device :UDN)))}
      (-> row :device :friendlyName)]
     [:h6.card-subtitle (-> row :device :modelDescription)]
     [:dl.card-body
@@ -35,6 +36,18 @@
 (defn ssdp-devices-page []
   [:div
    [:div.navbar.navbar-dark.bg-dark
-    [:h4.text-white "SSDP Services"]]
-   [device-table-component (rf/subscribe [:devices])]
-   [service-table-component (rf/subscribe [:services])]])
+    [:h4.text-white "SSDP Services A"]]
+   [device-table-component (rf/subscribe [:devices])]])
+
+(defn ssdp-device-page [devid]
+  [:div
+   [:div.navbar.navbar-dark.bg-dark
+    [:h4.text-white (str "Device: " @devid)]]])
+
+(defn main-view []
+  (let [active-view (rf/subscribe [:view])
+        selected-device (rf/subscribe [:selected-device])]
+    [(fn render-main []
+        (case @active-view
+          :all-devices [ssdp-devices-page]
+          :device [ssdp-device-page selected-device]))]))

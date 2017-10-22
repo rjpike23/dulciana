@@ -5,12 +5,18 @@
 (rf/reg-event-fx
  :initialize-db
  (fn [{:keys [db]}]
-   {:db db/initial-state}))
+   {:db (merge db/initial-state db)}))
 
 (rf/reg-event-db
- :change-view
- (fn [db [_ view]]
-   (assoc-in db [:ui :active-view] view)))
+ :view-devices
+ (fn [db _]
+   (assoc-in db [:ui :active-view] :all-devices)))
+
+(rf/reg-event-db
+ :view-device
+ (fn [db [_ devid]]
+   (assoc-in (assoc-in db [:ui :active-view] :device)
+             [:ui :device :selected-id] devid)))
 
 (rf/reg-event-db
  :devices-received

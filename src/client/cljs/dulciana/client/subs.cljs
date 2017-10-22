@@ -7,6 +7,11 @@
    (-> db :ui :active-view)))
 
 (rf/reg-sub
+ :selected-device
+ (fn [db _]
+   (-> db :ui :device :selected-id)))
+
+(rf/reg-sub
  :devices
  (fn [db _]
    (-> db :remote :devices)))

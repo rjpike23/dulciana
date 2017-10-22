@@ -28,21 +28,17 @@
 (defonce history
   (doto (Html5History.)
     (.setUseFragment false)
-    (goog-events/listen EventType.NAVIGATE
-                        (fn [event] (secretary/dispatch! (.-token event))))
+    (goog-events/listen EventType.NAVIGATE #(secretary/dispatch! (str (.-token %))))
     (.setEnabled true)))
 
-(defroute "/upnp/devices" [] (rf/dispatch [:change-view :all-devices]))
-(defroute "/upnp/device/:id" [id] (rf/dispatch [:change-view :device]))
-(defroute "/" []
-  #_(println "dispatched")
-  (.setToken history "/upnp/devices"))
+(defroute "/upnp/devices" [] (rf/dispatch [:view-devices]))
+(defroute "/upnp/device/:id" [id] (rf/dispatch [:view-device id]))
 
 (defn run []
   (rf/dispatch-sync [:initialize-db])
-  (ajax/GET "/devices" {:handler device-response-handler})
-  (ajax/GET "/services" {:handler service-response-handler})
-  (reagent/render (views/ssdp-devices-page)
+  (ajax/GET "/api/upnp/devices" {:handler device-response-handler})
+  (ajax/GET "/api/upnp/services" {:handler service-response-handler})
+  (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 
 (run)

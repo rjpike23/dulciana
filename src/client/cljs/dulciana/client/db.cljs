@@ -4,4 +4,5 @@
 (def initial-state
   {:remote {:devices {}
             :services {}}
-   :ui {:active-view :all-devices}})
+   :ui {:active-view :all-devices
+        :device {:selected-id nil}}})

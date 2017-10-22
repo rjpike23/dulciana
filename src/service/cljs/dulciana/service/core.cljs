@@ -32,25 +32,32 @@
                    [:script {:src "/resources/fig-client/dulciana_figwheel.js"
                              :type "text/javascript"}]]]))
 
+(defn template-express-handler [req res]
+  (. res (set "Access-Control-Allow-Origin" "*"))
+  (. res (send (template)))  )
+
 (def app (express))
 
 (. app use "/resources" (. express (static "target")))
-(. app (get "/devices"
+(. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str @state/remote-devices))))))
-(. app (get "/services"
+(. app (get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str @state/remote-services))))))
-(. app (get "/services/:svcid"
+(. app (get "/api/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str (@state/remote-services (.-svcid (.-params req)))))))))
-(. app (get "/*"
+(. app (get "/upnp/devices/"
+            template-express-handler))
+(. app (get "/upnp/device/:devid"
+            template-express-handler))
+(. app (get "/"
             (fn [req res]
-              (. res (set "Access-Control-Allow-Origin" "*"))
-              (. res (send (template))))))
+              (. res (redirect "/upnp/devices")))))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
