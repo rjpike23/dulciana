@@ -34,11 +34,15 @@
 
 (defn template-express-handler [req res]
   (. res (set "Access-Control-Allow-Origin" "*"))
-  (. res (send (template)))  )
+  (. res (send (template))))
 
 (def app (express))
 
 (. app use "/resources" (. express (static "target")))
+(. app (get "/api/upnp/announcements"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              (. res (send (pr-str @state/announcements))))))
 (. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
@@ -47,7 +51,7 @@
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str @state/remote-services))))))
-(. app (get "/api/services/:svcid"
+(. app (get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
               (. res (send (pr-str (@state/remote-services (.-svcid (.-params req)))))))))

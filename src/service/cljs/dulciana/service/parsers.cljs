@@ -34,7 +34,7 @@
     (assoc channel-msg :message parse-result)))
 
 (defn error-handler [ex]
-  (log/error ex))
+  (log/error "Exception while processing message." ex))
 
 (defn header-map [hdrs-ast]
   (into {} (map #(let [[HEADER [NAME name] _ [VALUE value]] %] [(str/lower-case name) value])

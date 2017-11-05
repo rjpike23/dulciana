@@ -25,6 +25,9 @@
 (defn service-response-handler [response]
   (rf/dispatch [:services-received (into (sorted-map) (read-string response))]))
 
+(defn announcement-response-handler [response]
+  (rf/dispatch [:announcements-received (into (sorted-map) (read-string response))]))
+
 (defonce history
   (doto (Html5History.)
     (.setUseFragment false)
@@ -38,6 +41,7 @@
   (rf/dispatch-sync [:initialize-db])
   (ajax/GET "/api/upnp/devices" {:handler device-response-handler})
   (ajax/GET "/api/upnp/services" {:handler service-response-handler})
+  (ajax/GET "/api/upnp/announcements" {:handler announcement-response-handler})
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 

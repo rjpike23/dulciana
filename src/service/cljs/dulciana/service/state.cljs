@@ -30,7 +30,6 @@
 
 (defonce remote-services (atom {}))
 
-;;; SHIT THIS IS ALL FUCKED UP.
 (defn do-request [dev-id]
   (swap-with-effects! remote-devices
                       (fn [devs] (if (@announcements dev-id)
@@ -44,8 +43,7 @@
         fetched-devs (set (keys @remote-devices))
         remove-devs (set/difference fetched-devs announced-devs)
         new-devs (set/difference announced-devs fetched-devs)]
-    (log/debug "watcher called")
-    (swap-with-effects! remote-devices
+     (swap-with-effects! remote-devices
                         (fn [devs]
                           (merge (into {} (map (fn [id] [id :new]) new-devs))
                                  (dissoc devs remove-devs)))
@@ -66,7 +64,7 @@
   (into {} (filter (comp not (partial expired? (js/Date.))) anns)))
 
 (defn update-announcements [notification]
-  (log/debug "Updating")
+  (log/debug "Updating" ((-> notification :message :headers) "usn"))
   (swap-with-effects! announcements
                       (fn [anns]
                         (assoc (remove-expired-announcements anns)
@@ -74,7 +72,7 @@
                       announcement-watcher))
 
 (defn remove-announcement [notification]
-  (log/debug "Removing")
+  (log/debug "Removing" ((-> notification :message :headers) "usn"))
   (swap-with-effects! announcements
                       (fn [anns]
                         (dissoc (remove-expired-announcements anns)
@@ -95,7 +93,6 @@
   (go-loop []
     (let [notification (async/<! @notify-channel)]
       (when notification
-        (log/debug "Notification received")
         (let [notify-type ((-> notification :message :headers) "nts")]
           (case notify-type
             "ssdp:alive" (update-announcements notification)

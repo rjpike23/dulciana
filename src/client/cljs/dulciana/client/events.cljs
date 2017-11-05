@@ -27,3 +27,8 @@
  :services-received
  (fn [db [_ svcs]]
    (assoc-in db [:remote :services] svcs)))
+
+(rf/reg-event-db
+ :announcements-received
+ (fn [db [_ announcements]]
+   (assoc-in db [:remote :announcements] announcements)))

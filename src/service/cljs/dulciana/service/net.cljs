@@ -47,7 +47,7 @@
   "Callback for messages received on the SSDP multicast socket.
   pushes messages onto the ssdp-message-channel, with metadata."
   (let [remote (js->clj remote-js :keywordize-keys true)]
-    ;(log/debug "Socket message received from" (remote :address) "on" (iface :address))
+    (log/debug "Socket message received from" (:address remote))
     (go (>! @parser/ssdp-message-channel {:remote remote
                                           :interface iface
                                           :timestamp (js/Date.)

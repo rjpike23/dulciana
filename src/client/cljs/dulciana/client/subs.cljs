@@ -1,15 +1,11 @@
 (ns dulciana.client.subs
-  (:require [re-frame.core :as rf]))
+  (:require [clojure.string :as str]
+            [re-frame.core :as rf]))
 
 (rf/reg-sub
  :view
  (fn [db _]
    (-> db :ui :active-view)))
-
-(rf/reg-sub
- :selected-device
- (fn [db _]
-   (-> db :ui :device :selected-id)))
 
 (rf/reg-sub
  :devices
@@ -20,3 +16,42 @@
  :services
  (fn [db _]
    (-> db :remote :services)))
+
+(rf/reg-sub
+ :announcements
+ (fn [db _]
+   (-> db :remote :announcements)))
+
+(rf/reg-sub
+ :selected-device-id
+ (fn [db _]
+   (-> db :ui :device :selected-id)))
+
+(defn services-by-device [device-id services]
+  (into {} (filter (fn [[key svc]] (str/starts-with? key device-id))
+                   services)))
+
+(rf/reg-sub
+ :merged-devices
+ (fn [_ _]
+   [(rf/subscribe [:devices])
+    (rf/subscribe [:announcements])
+    (rf/subscribe [:services])])
+ (fn [[devices announcements services] _]
+   (let [dev-anns (select-keys announcements (set (keys devices)))
+         svc-anns (select-keys announcements (set (keys services)))
+         merged-svcs (merge-with (fn [s a] {:svc s :announcement a})
+                                 services svc-anns)
+         merged-devs (merge-with (fn [d a] {:dev (:device d) :announcement a})
+                                 devices dev-anns)]
+     (into {} (map (fn [[id dev]]
+                     [id (assoc dev :svcs (services-by-device id merged-svcs))])
+                   merged-devs)))))
+
+(rf/reg-sub
+ :selected-device
+ (fn [_ _]
+   [(rf/subscribe [:selected-device-id])
+    (rf/subscribe [:merged-devices])])
+ (fn [[selected-id devices] _]
+   (devices selected-id)))
