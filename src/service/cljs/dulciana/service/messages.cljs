@@ -12,7 +12,7 @@
 (defn emit-m-search-msg []
   (emit-ssdp-request-msg "M-SEARCH" "*" {:host "239.255.255.250:1900"
                                          :man "\"ssdp:discover\""
-                                         :mx 1
+                                         :mx 5
                                          :st "ssdp:all"}))
 
 (defn emit-notify-msg [])

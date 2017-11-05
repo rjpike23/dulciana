@@ -30,11 +30,12 @@
 (defn ssdp-parse [channel-msg]
   (let [parse-result (ssdp-parser (:message channel-msg))]
     (when (parser/failure? parse-result)
+      (log/error "Error" parse-result)
       (throw (js/Error. parse-result)))
     (assoc channel-msg :message parse-result)))
 
 (defn error-handler [ex]
-  (log/error "Exception while processing message." ex))
+  (log/error "Exception parsing msg" (str (js->clj ex))))
 
 (defn header-map [hdrs-ast]
   (into {} (map #(let [[HEADER [NAME name] _ [VALUE value]] %] [(str/lower-case name) value])
@@ -42,6 +43,7 @@
 
 (defn ssdp-analyzer [parse-result]
   (let [[SSDP_MSG [START_LINE [type]] _ [HEADERS & headers] _ body] (:message parse-result)]
+    (log/debug "SSDP msg type" type)
     (assoc parse-result :message {:type type
                                   :headers (header-map headers)
                                   :body body})))
