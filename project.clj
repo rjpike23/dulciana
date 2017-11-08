@@ -27,7 +27,7 @@
   :clean-targets ^{:protect false} ["target"]
   :cljsbuild {
               :builds [{:id "fig-service"
-                         :source-paths ["src/service/cljs"]
+                         :source-paths ["src/service/main/cljs" "src/service/test/cljs"]
                          :figwheel {:on-jsload "dulciana.service.core/fig-reload-hook"}
                          :compiler {:main dulciana.service.core
                                     :output-dir "target/fig-service"
@@ -42,7 +42,7 @@
                                                :sax "1.2.2"
                                                "@pupeno/xmlhttprequest" "1.7.0"}}}
                        {:id "fig-client"
-                        :source-paths ["src/client/cljs"]
+                        :source-paths ["src/client/main/cljs" "src/client/test/cljs"]
                         :figwheel true
                         :compiler {:main dulciana.client.core
                                    :output-dir "target/fig-client"
