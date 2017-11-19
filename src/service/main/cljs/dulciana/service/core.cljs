@@ -38,6 +38,9 @@
 
 (def app (express))
 
+(defn filter-pending [map]
+  (into {} (filter (fn [[k v]] (not= :pending v)) map)))
+
 (. app use "/resources" (. express (static "target")))
 (. app (get "/api/upnp/announcements"
             (fn [req res]
@@ -46,11 +49,11 @@
 (. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @state/remote-devices))))))
+              (. res (send (pr-str (filter-pending @state/remote-devices)))))))
 (. app (get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @state/remote-services))))))
+              (. res (send (pr-str (filter-pending @state/remote-services)))))))
 (. app (get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))

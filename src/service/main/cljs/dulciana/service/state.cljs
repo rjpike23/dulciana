@@ -10,14 +10,20 @@
             [taoensso.timbre :as log :include-macros true]))
 
 (defn swap-with-effects! [atom transformer side-effector]
-  (when (not= @atom (swap! atom transformer))
-    (side-effector @atom)))
+  (let [prev @atom
+        result (swap! atom transformer)]
+    (when (not= prev result)
+      (side-effector result))
+    result))
 
 (defn get-dev-id [usn]
   (first (str/split usn "::")))
 
 (defn get-svc-id [usn]
   (second (str/split usn "::")))
+
+(defn device-member? [devid svcname]
+  (str/starts-with? svcname devid))
 
 (defn create-usn [dev-id svc-id]
   (if svc-id
@@ -32,9 +38,9 @@
 
 (defn do-request [dev-id]
   (swap-with-effects! remote-devices
-                      (fn [devs] (if (@announcements dev-id)
-                                   (assoc devs dev-id :pending)
-                                   (dissoc devs dev-id)))
+                      (fn [devs] (log/debug "*** at do-request" devs) (if (@announcements dev-id)
+                                      (assoc devs dev-id :pending)
+                                      (dissoc devs dev-id)))
                       (fn [devs] (when-let [announcement (@announcements dev-id)]
                                    (net/get-device-descriptor (@announcements dev-id))))))
 
@@ -43,10 +49,10 @@
         fetched-devs (set (keys @remote-devices))
         remove-devs (set/difference fetched-devs announced-devs)
         new-devs (set/difference announced-devs fetched-devs)]
-     (swap-with-effects! remote-devices
+    (swap-with-effects! remote-devices
                         (fn [devs]
                           (merge (into {} (map (fn [id] [id :new]) new-devs))
-                                 (dissoc devs remove-devs)))
+                                 (apply dissoc devs remove-devs)))
                         (fn [devs]
                           (doseq [[dev-id _] (filter (fn [[k v]] (= v :new)) devs)]
                             (do-request dev-id))))))
@@ -63,21 +69,22 @@
 (defn remove-expired-announcements [anns]
   (into {} (filter (comp not (partial expired? (js/Date.))) anns)))
 
-(defn update-announcements [notification]
+(defn update-announcements [announcements-atom notification]
   (log/debug "Updating" ((-> notification :message :headers) "usn"))
-  (swap-with-effects! announcements
+  (swap-with-effects! announcements-atom
                       (fn [anns]
                         (assoc (remove-expired-announcements anns)
                                ((-> notification :message :headers) "usn") notification))
                       announcement-watcher))
 
-(defn remove-announcement [notification]
-  (log/debug "Removing" ((-> notification :message :headers) "usn"))
-  (swap-with-effects! announcements
-                      (fn [anns]
-                        (dissoc (remove-expired-announcements anns)
-                                ((-> notification :message :headers) "usn")))
-                      announcement-watcher))
+(defn remove-announcements [announcements-atom notification]
+  (let [id (get-dev-id ((-> notification :message :headers) "usn"))]
+    (log/debug "Removing" id)
+    (swap-with-effects! announcements-atom
+                        (fn [anns]
+                          (into {} (filter (fn [[k v]] (not (device-member? id k)))
+                                           (remove-expired-announcements anns))))
+                        announcement-watcher)))
 
 (defn get-announced-device-ids [announcement-map]
   (set (map (fn [[k v]] (get-dev-id k)) announcement-map)))
@@ -95,9 +102,9 @@
       (when notification
         (let [notify-type ((-> notification :message :headers) "nts")]
           (case notify-type
-            "ssdp:alive" (update-announcements notification)
-            "ssdp:update" (update-announcements notification)
-            "ssdp:byebye" (remove-announcement notification)
+            "ssdp:alive" (update-announcements announcements notification)
+            "ssdp:update" (update-announcements announcements notification)
+            "ssdp:byebye" (remove-announcements announcements notification)
             (log/debug "Ignoring announcement type" notify-type)))
         (recur)))))
 
@@ -116,7 +123,7 @@
   (go-loop []
     (let [dev-desc (async/<! @device-descriptor-channel)]
       (when dev-desc
-        (log/debug "Got dev descriptor")
+        (log/debug "Got dev descriptor" (-> dev-desc :message :device :UDN))
         (swap-with-effects! remote-devices
                             (fn [devs] (assoc devs (-> dev-desc :message :device :UDN) (dev-desc :message)))
                             (fn [devs]
@@ -130,7 +137,7 @@
   (go-loop []
     (let [svc-desc (async/<! @service-descriptor-channel)]
       (when svc-desc
-        (log/debug "Got svc descriptor")
+        (log/debug "Got svc descriptor" (-> svc-desc :service-info :serviceId))
         (swap! remote-services
                (fn [svcs] (assoc svcs (str (get-dev-id ((-> svc-desc :announcement :message :headers) "usn"))
                                            "::"

@@ -25,8 +25,71 @@
              "ST: sddp:all"
              "USER-AGENT: OS/1.0 UPnP/2.0 product/1.0\r\n\r\n"]))
 
+(def *illegal-msg* "I am not a valid SSDP message")
+
+(def *expired-announcement*
+  {:remote
+   {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
+   :interface
+   {:address "127.0.0.1" :netmask "255.255.255.255" :family "IPv4" :mac "00:00:00:00:00:00" :internal true}
+   :message
+   {:type :NOTIFY
+    :headers
+    {"host" "239.255.255.250:1900"
+     "cache-control" "max-age=60"
+     "location" "http://example.com/desc.xml"
+     "nts" "ssdp:alive"
+     "server" "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
+     "nt" "uuid:abc::123"
+     "usn" "uuid:abc::123"}
+    :body nil}
+   :timestamp (js/Date. 0)})
+
+(def *valid-announcement*
+  {:remote
+   {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
+   :interface
+   {:address "127.0.0.1" :netmask "255.255.255.255" :family "IPv4" :mac "00:00:00:00:00:00" :internal true}
+   :message
+   {:type :NOTIFY
+    :headers
+    {"host" "239.255.255.250:1900"
+     "cache-control" "max-age=60"
+     "location" "http://example.com/desc.xml"
+     "nts" "ssdp:alive"
+     "server" "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
+     "nt" "uuid:abd::124"
+     "usn" "uuid:abd::124"}
+    :body nil}
+   :timestamp (js/Date. 10000000000000)})
+
+(def *announcements*
+  {"uuid:abc::123" *expired-announcement*
+   "uuid:abd::124" *valid-announcement*})
+
+;; The format of the parser output is subject to change with the grammar, thus,
+;; there are no assertions on the content of the return value.
 (deftest test-parse
   (is (not (nil? (parser/ssdp-parse {:message *notify-msg*}))))
-  (is (not (nil? (parser/ssdp-parse {:message *search-msg*})))))
+  (is (not (nil? (parser/ssdp-parse {:message *search-msg*}))))
+  (try
+    (parser/ssdp-parse {:message *illegal-msg*})
+    (is nil "Expected error to be thrown.")
+    (catch js/Error e nil)))
+
+(deftest test-analyze
+  (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*}))]
+    (is (= :NOTIFY (-> notify-result :message :type)))
+    (is (= "239.255.255.250:1900" ((-> notify-result :message :headers) "host")))))
+
+(deftest remove-expired
+  (is (= {"uuid:abd::124" *valid-announcement*}
+         (state/remove-expired-announcements *announcements*))))
+
+(deftest remove-announcement
+  (is (= {}
+         (state/remove-announcements (atom *announcements*) *valid-announcement*)))
+  (is (= {"uuid:abd::124" *valid-announcement*}
+         (state/remove-announcements (atom *announcements*) *expired-announcement*))))
 
 (run-tests)
