@@ -48,7 +48,7 @@
                       (fn [devs] (when-let [announcement (@announcements dev-id)]
                                    (net/get-device-descriptor (@announcements dev-id))))))
 
-(defn announcement-watcher [announcements]
+(defn sync-devices [announcements]
   (let [announced-devs (set (map get-dev-id (keys announcements)))
         fetched-devs (set (keys @remote-devices))
         remove-devs (set/difference fetched-devs announced-devs)
@@ -73,22 +73,22 @@
 (defn remove-expired-announcements [anns]
   (into {} (filter (comp not (partial expired? (js/Date.))) anns)))
 
-(defn update-announcements [announcements-atom notification]
+(defn update-announcements [announcements-atom notification side-effector]
   (log/debug "Updating" ((-> notification :message :headers) "usn"))
   (swap-with-effects! announcements-atom
                       (fn [anns]
                         (assoc (remove-expired-announcements anns)
                                ((-> notification :message :headers) "usn") notification))
-                      announcement-watcher))
+                      side-effector))
 
-(defn remove-announcements [announcements-atom notification]
+(defn remove-announcements [announcements-atom notification side-effector]
   (let [id (get-dev-id ((-> notification :message :headers) "usn"))]
     (log/debug "Removing" id)
     (swap-with-effects! announcements-atom
                         (fn [anns]
                           (into {} (filter (fn [[k v]] (not (device-member? id k)))
                                            (remove-expired-announcements anns))))
-                        announcement-watcher)))
+                        side-effector)))
 
 (defn get-announced-device-ids [announcement-map]
   (set (map (fn [[k v]] (get-dev-id k)) announcement-map)))
@@ -106,9 +106,9 @@
       (when notification
         (let [notify-type ((-> notification :message :headers) "nts")]
           (case notify-type
-            "ssdp:alive" (update-announcements announcements notification)
-            "ssdp:update" (update-announcements announcements notification)
-            "ssdp:byebye" (remove-announcements announcements notification)
+            "ssdp:alive" (update-announcements announcements notification sync-devices)
+            "ssdp:update" (update-announcements announcements notification sync-devices)
+            "ssdp:byebye" (remove-announcements announcements notification sync-devices)
             (log/debug "Ignoring announcement type" notify-type)))
         (recur)))))
 

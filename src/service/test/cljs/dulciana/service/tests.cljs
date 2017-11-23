@@ -94,8 +94,8 @@
 
 (deftest remove-announcement
   (is (= {}
-         (state/remove-announcements (atom *announcements*) *valid-announcement*)))
+         (state/remove-announcements (atom *announcements*) *valid-announcement* (constantly nil))))
   (is (= {"uuid:abd::124" *valid-announcement*}
-         (state/remove-announcements (atom *announcements*) *expired-announcement*))))
+         (state/remove-announcements (atom *announcements*) *expired-announcement* (constantly nil)))))
 
 (run-tests)
