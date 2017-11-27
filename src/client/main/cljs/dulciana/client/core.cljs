@@ -25,14 +25,11 @@
 (enable-console-print!)
 (devtools/install!)
 
-(defn device-response-handler [response]
-  (rf/dispatch [:devices-received (into (sorted-map) (read-string response))]))
+(defn parse-edn [response]
+  (into (sorted-map) (read-string response)))
 
-(defn service-response-handler [response]
-  (rf/dispatch [:services-received (into (sorted-map) (read-string response))]))
-
-(defn announcement-response-handler [response]
-  (rf/dispatch [:announcements-received (into (sorted-map) (read-string response))]))
+(defn dispatch-response [event response]
+  (rf/dispatch [event (parse-edn response)]))
 
 (defonce history
   (doto (Html5History.)
@@ -41,13 +38,14 @@
     (.setEnabled true)))
 
 (defroute "/upnp/devices" [] (rf/dispatch [:view-devices]))
+(defroute "/upnp/device/:devid/service/:svcid" [devid svcid] (rf/dispatch [:view-service devid svcid]))
 (defroute "/upnp/device/:id" [id] (rf/dispatch [:view-device id]))
 
 (defn run []
   (rf/dispatch-sync [:initialize-db])
-  (ajax/GET "/api/upnp/devices" {:handler device-response-handler})
-  (ajax/GET "/api/upnp/services" {:handler service-response-handler})
-  (ajax/GET "/api/upnp/announcements" {:handler announcement-response-handler})
+  (ajax/GET "/api/upnp/devices" {:handler (partial dispatch-response :devices-received)})
+  (ajax/GET "/api/upnp/services" {:handler (partial dispatch-response :services-received)})
+  (ajax/GET "/api/upnp/announcements" {:handler (partial dispatch-response :announcements-received)})
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 

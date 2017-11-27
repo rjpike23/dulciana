@@ -7,7 +7,14 @@
 (ns dulciana.client.views
   (:require [re-frame.core :as rf]
             [secretary.core :as secretary]
-            [cemerick.url :as url]))
+            [cemerick.url :as url]
+            [taoensso.timbre :as log :include-macros true]))
+
+(defn bootstrap-3by-table [components]
+  (vec (concat [:div.col]
+               (mapv (fn [partitions]
+                       (vec (concat [:div.row] (mapv #(or % [:div.col]) partitions))))
+                     (partition-all 3 components)))))
 
 (defn device-card [device]
   [:div.col-md
@@ -21,13 +28,7 @@
      [:dt "Model "] [:dd (-> device :device :modelName)]]]])
 
 (defn device-table-component [devs]
-  (vec (concat [:div.col]
-               (mapv (fn [x] 
-                       [:div.row
-                        (nth x 0 [:div.col])
-                        (nth x 1 [:div.col])
-                        (nth x 2 [:div.col])])
-                     (partition-all 3 (mapv (fn [[key val]] (device-card val)) @devs))))))
+  (bootstrap-3by-table (mapv (fn [[key val]] (device-card val)) @devs)))
 
 (defn ssdp-devices-page []
   [:div
@@ -35,19 +36,22 @@
     [:h4.text-white "SSDP Devices"]]
    [device-table-component (rf/subscribe [:devices])]])
 
-(defn service-card [location svc]
-  (println location)
-  [:div.card {:key (:serviceId svc)}
-   [:dl.card-body
-    [:dt "ID"] [:dd (:serviceId svc)]
-    [:dt "Type"] [:dd (:serviceType svc)]
-    [:dt "SCPD URL"] [:dd [:a {:href (str (url/url location (:SCPDURL svc)))} (:SCPDURL svc)]]
-    [:dt "Control URL"] [:dd (:controlURL svc)]
-    [:dt "Event Sub URL"] [:dd (:eventSubURL svc)]]])
+(defn service-card [location device svc]
+  [:div.col-md
+   [:div.card {:key (:serviceId svc)}
+    [:button.card-title.btn.btn-primary
+     {:on-click #(.setToken dulciana.client.core/history (str "upnp/device/" (:UDN device)
+                                                              "/service/" (:serviceId svc)))}
+     (:serviceId svc)]
+    [:dl.card-body
+     [:dt "ID"] [:dd (:serviceId svc)]
+     [:dt "Type"] [:dd (:serviceType svc)]
+     [:dt "SCPD URL"] [:dd [:a {:href (str (url/url location (:SCPDURL svc)))} (:SCPDURL svc)]]
+     [:dt "Control URL"] [:dd (:controlURL svc)]
+     [:dt "Event Sub URL"] [:dd (:eventSubURL svc)]]]])
 
 (defn device-details-view []
   (let [dev (rf/subscribe [:selected-device])]
-    (println @dev)
     [:div
      [:div.card
       [:dl.card-body
@@ -59,18 +63,33 @@
        [:dt "UDN"] [:dd (-> @dev :dev :UDN)]
        [:dt "Serial Number"] [:dd (-> @dev :dev :serialNumber)]
        [:dt "Icon"]]
-      [:div (map (partial service-card ((-> @dev :announcement :message :headers) "location"))
-                 (-> @dev :dev :serviceList))]]]))
+      [:div (bootstrap-3by-table (map (partial service-card ((-> @dev :announcement :message :headers) "location") (:dev @dev))
+                                      (-> @dev :dev :serviceList)))]]]))
 
-(defn ssdp-device-page [devid]
+(defn ssdp-device-page []
   [:div
    [:div.navbar.navbar-dark.bg-dark
     [:h4.text-white (str "SSDP Device")]]
    [device-details-view]])
+
+(defn service-state-variables [svc])
+
+(defn service-details-view []
+  (let [svc (rf/subscribe [:selected-service])]
+    [:div
+     [:div.card
+      [:div.card-body "Service details here"]]]))
+
+(defn ssdp-service-page []
+  [:div
+   [:div.navbar.navbar-dark.bg-dark
+    [:h3.text-white (str "SSDP Service")]]
+   [service-details-view]])
 
 (defn main-view []
   (let [active-view (rf/subscribe [:view])]
     [(fn render-main []
         (case @active-view
           :all-devices [ssdp-devices-page]
-          :device [ssdp-device-page]))]))
+          :device [ssdp-device-page]
+          :service [ssdp-service-page]))]))

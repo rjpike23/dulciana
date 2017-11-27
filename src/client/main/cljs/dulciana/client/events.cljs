@@ -25,6 +25,12 @@
              [:ui :device :selected-id] devid)))
 
 (rf/reg-event-db
+ :view-service
+ (fn [db [_ devid svcid]]
+   (assoc-in (assoc-in db [:ui :active-view] :service)
+             [:ui :service :selected-id] svcid)))
+
+(rf/reg-event-db
  :devices-received
  (fn [db [_ devs]]
    (assoc-in db [:remote :devices] devs)))
