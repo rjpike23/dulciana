@@ -33,6 +33,11 @@
  (fn [db _]
    (-> db :ui :device :selected-id)))
 
+(rf/reg-sub
+ :selected-service-id
+ (fn [db _]
+   (-> db :ui :service :selected-id)))
+
 (defn services-by-device [device-id services]
   (into {} (filter (fn [[key svc]] (str/starts-with? key device-id))
                    services)))
@@ -61,3 +66,11 @@
     (rf/subscribe [:merged-devices])])
  (fn [[selected-id devices] _]
    (devices selected-id)))
+
+(rf/reg-sub
+ :selected-service
+ (fn [_ _]
+   [(rf/subscribe [:selected-service-id])
+    (rf/subscribe [:services])])
+ (fn [[svc-id services]]
+   (services svc-id)))

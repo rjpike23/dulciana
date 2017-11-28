@@ -72,19 +72,36 @@
     [:h4.text-white (str "SSDP Device")]]
    [device-details-view]])
 
-(defn service-state-variables [svc])
+(defn service-state-variable-card [state-var]
+  [:div.col-md
+   [:dl
+    [:dt "Name"] [:dd (:name state-var)]]])
 
-(defn service-details-view []
+(defn service-state-vars-view []
   (let [svc (rf/subscribe [:selected-service])]
     [:div
      [:div.card
-      [:div.card-body "Service details here"]]]))
+      [:div.card-title [:h6 "State Variables"]]
+      [:div.card-body (bootstrap-3by-table (map service-state-variable-card (:serviceStateTable @svc)))]]]))
+
+(defn service-actions-card [action]
+  [:div.col-md
+   [:dl
+    [:dt "Name"] [:dd (:name action)]]])
+
+(defn service-actions-view []
+  (let [svc (rf/subscribe [:selected-service])]
+    (log/debug @svc)
+    [:div.card
+     [:div.card-title [:h6 "Actions"]]
+     [:div.card-body (bootstrap-3by-table (map service-actions-card (:actionList @svc)))]]))
 
 (defn ssdp-service-page []
   [:div
    [:div.navbar.navbar-dark.bg-dark
     [:h3.text-white (str "SSDP Service")]]
-   [service-details-view]])
+   [service-state-vars-view]
+   [service-actions-view]])
 
 (defn main-view []
   (let [active-view (rf/subscribe [:view])]
