@@ -29,7 +29,7 @@
               "HEADERS = (HEADER *)"
               "SEPERATOR = ':' #'\\s*'"
               "HEADER = (NAME SEPERATOR VALUE CRLF)"
-              "NAME = #'[\\w\\-_]*'"
+              "NAME = #'[\\w\\-_\\.]*'"
               "VALUE = #'[^\\r]*'"
               "BODY = #'.*'")))
 

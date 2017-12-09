@@ -13,7 +13,10 @@
 (defn bootstrap-3by-table [components]
   (vec (concat [:div.col]
                (mapv (fn [partitions]
-                       (vec (concat [:div.row] (mapv #(or % [:div.col]) partitions))))
+                       [:div.row
+                        (nth partitions 0 [:div.col])
+                        (nth partitions 1 [:div.col])
+                        (nth partitions 2 [:div.col])])
                      (partition-all 3 components)))))
 
 (defn device-card [device]
