@@ -110,17 +110,21 @@
 
 ;;; Following functions are used to init/teardown the SSDP multicast listeners.
 (defn start-listener
-  "Creates a new multicast socket on the supplied interface."
+  "Creates a new multicast socket on the supplied interface. "
   [iface]
-  (let [socket (dgram/createSocket (ssdp-protocols (iface :family)))]
+  (let [socket (dgram/createSocket (ssdp-protocols (:family iface)))]
     (.on socket "error" (partial handle-ssdp-error iface socket))
     (.on socket "message" (partial handle-ssdp-message iface socket))
     (.on socket "close" (partial handle-ssdp-socket-close iface socket))
     (.on socket "listening" (partial handle-ssdp-socket-listening iface socket))
-    (.bind socket ssdp-port (iface :address))
+    (if (= "Windows_NT" (os/type))
+      (.bind socket ssdp-port (:address iface)) ; Windows
+      (.bind socket ssdp-port)) ; UNIX/Linux
     socket))
 
 (defn start-listeners []
+  ; On windows we need to iterate all external interfaces and start multicast
+  ; on all of them. UNIX/Linux will correctly listen on * with a single call.
   (doseq [iface (get-ifaces)]
     (start-listener iface)))
 
