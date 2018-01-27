@@ -40,6 +40,11 @@
   (when-let [socket (@sockets (iface :address))]
     (.send socket message ssdp-port (ssdp-mcast-addresses (iface :family)))))
 
+(defn send-ssdp-search-message
+  "Sends a M-SEARCH SSDP Discovery message on all enabled interfaces."
+  [iface]
+  (send-ssdp-message iface (messages/emit-m-search-msg)))
+
 ;;; Datagram event handlers follow:
 (defn handle-ssdp-error
   "Callback for socket errors returned from NodeJS datagram API."
@@ -72,7 +77,8 @@
   (.addMembership socket
                   (ssdp-mcast-addresses (iface :family))
                   (iface :address))
-  (swap! sockets assoc (iface :address) socket))
+  (swap! sockets assoc (iface :address) socket)
+  (send-ssdp-search-message iface))
 
 ;;; HTTP methods for sending requests for descriptors / SOAP requests below:
 (defn get-device-descriptor [device-announcement]

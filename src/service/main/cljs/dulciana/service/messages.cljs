@@ -7,34 +7,49 @@
 (ns dulciana.service.messages
   (:require [clojure.string :as str]))
 
-(defn emit-ssdp-request-msg [verb address headers]
+(defn emit-ssdp-request-msg
+  "Formats an SSDP request message using the supplied verb/method, address
+  and map of headers."
+  [verb address headers]
   (str (str/join "\r\n"
                  (cons (str verb " " address " HTTP/1.1")
                        (map (fn [[k v]] (str (str/upper-case (name k)) ": " v)) headers)))
        "\r\n\r\n"))
 
-(defn emit-m-search-msg []
-  (emit-ssdp-request-msg "M-SEARCH" "*" {:host "239.255.255.250:1900"
-                                         :man "\"ssdp:discover\""
-                                         :mx 5
-                                         :st "ssdp:all"}))
+(defn emit-m-search-msg
+  "Constructs a M-SEARCH SSDP discovery message. Returns a string."
+  []
+  (emit-ssdp-request-msg "M-SEARCH" "*"
+                         {:host "239.255.255.250:1900"
+                          :man "\"ssdp:discover\""
+                          :mx 5
+                          :st "ssdp:all"}))
 
-(defn emit-notify-msg [])
+(defn emit-notify-msg [scdp-location notify-type usn]
+  (emit-ssdp-request-msg "NOTIFY" "*"
+                         {:host "239.255.255.250:1900"
+                          :location scdp-location
+                          :nt notify-type
+                          :nts "ssdp:update"
+                          :usn usn}))
 
 (defn emit-subscribe-msg [pub-host pub-path callback-url state-vars]
-  (emit-ssdp-request-msg "SUBSCRIBE" (str pub-host pub-path) {:host pub-host
-                                                              :nt "upnp:event"
-                                                              :timeout "Second-30"
-                                                              :statevar state-vars}))
+  (emit-ssdp-request-msg "SUBSCRIBE" (str pub-host pub-path)
+                         {:host pub-host
+                          :nt "upnp:event"
+                          :timeout "Second-30"
+                          :statevar state-vars}))
 
 (defn emit-renew-subscription-msg [pub-host pub-path sid]
-  (emit-ssdp-request-msg "SUBSCRIBE" (str pub-host pub-path) {:host pub-host
-                                                              :sid sid
-                                                              :timeout "Second-30"}))
+  (emit-ssdp-request-msg "SUBSCRIBE" (str pub-host pub-path)
+                         {:host pub-host
+                          :sid sid
+                          :timeout "Second-30"}))
 
 (defn emit-unscubscribe-msg [pub-host pub-path sid]
-  (emit-ssdp-request-msg "UNSUBSCRIBE" (str pub-host pub-path) {:host pub-host
-                                                                :sid sid}))
+  (emit-ssdp-request-msg "UNSUBSCRIBE" (str pub-host pub-path)
+                         {:host pub-host
+                          :sid sid}))
 
 (defn emit-control-msg-param [[name value]]
   (str "<" name ">" value "</" name ">"))

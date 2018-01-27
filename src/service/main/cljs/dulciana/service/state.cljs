@@ -13,23 +13,36 @@
             [dulciana.service.parser :as parser]
             [taoensso.timbre :as log :include-macros true]))
 
-(defn swap-with-effects! [atom transformer side-effector]
+(defn swap-with-effects!
+  "This function performs a swap! and conditionally executes a
+  function which may have side effects, if the call to swap!
+  actually changes the referenced atom."
+  [atom transformer side-effector]
   (let [prev @atom
         result (swap! atom transformer)]
     (when (not= prev result)
       (side-effector result))
     result))
 
-(defn get-dev-id [usn]
+(defn get-dev-id
+  "Utility function to extract the device id from a USN value."
+  [usn]
   (first (str/split usn "::")))
 
-(defn get-svc-id [usn]
+(defn get-svc-id
+  "Utility function extract the service id from a USN value."
+  [usn]
   (second (str/split usn "::")))
 
-(defn device-member? [devid svcname]
+(defn device-member?
+  "Utility function to determine if a service with the supplied
+  USN (svcname) is a part of the device with the supplied id."
+  [devid svcname]
   (str/starts-with? svcname devid))
 
-(defn create-usn [dev-id svc-id]
+(defn create-usn
+  "Constrcuts a USN from the device id and service id."
+  [dev-id svc-id]
   (if svc-id
     (str dev-id "::" svc-id)
     dev-id))
@@ -40,13 +53,17 @@
 
 (defonce remote-services (atom {}))
 
+(defonce local-services (atom {}))
+
+(defonce local-devices (atom {}))
+
 (defn do-request [dev-id]
   (swap-with-effects! remote-devices
-                      (fn [devs] (log/debug "*** at do-request" devs) (if (@announcements dev-id)
+                      (fn [devs] (if (@announcements dev-id)
                                       (assoc devs dev-id :pending)
                                       (dissoc devs dev-id)))
                       (fn [devs] (when-let [announcement (@announcements dev-id)]
-                                   (net/get-device-descriptor (@announcements dev-id))))))
+                                   (net/get-device-descriptor announcement)))))
 
 (defn sync-devices [announcements]
   (let [announced-devs (set (map get-dev-id (keys announcements)))
@@ -64,7 +81,7 @@
 (defn expiration [ann]
   (let [timestamp (-> ann :timestamp)
         cache-header ((-> ann :message :headers) "cache-control")
-        age-millis (* 1000 (js/parseInt (subs cache-header (count "max-age="))))]
+        age-millis (* 1000 (js/parseInt (second (first (re-seq #"max-age[ ]*=[ ]*([1234567890]*)" cache-header)))))]
     (js/Date. (+ age-millis (.getTime timestamp)))))
 
 (defn expired? [now [key ann]]
@@ -104,12 +121,15 @@
   (go-loop []
     (let [notification (async/<! @notify-channel)]
       (when notification
-        (let [notify-type ((-> notification :message :headers) "nts")]
-          (case notify-type
-            "ssdp:alive" (update-announcements announcements notification sync-devices)
-            "ssdp:update" (update-announcements announcements notification sync-devices)
-            "ssdp:byebye" (remove-announcements announcements notification sync-devices)
-            (log/debug "Ignoring announcement type" notify-type)))
+        (try
+          (let [notify-type ((-> notification :message :headers) "nts")]
+            (case notify-type
+              "ssdp:alive" (update-announcements announcements notification sync-devices)
+              "ssdp:update" (update-announcements announcements notification sync-devices)
+              "ssdp:byebye" (remove-announcements announcements notification sync-devices)
+              (log/debug "Ignoring announcement type" notify-type)))
+          (catch :default e
+            (log/error e)))
         (recur)))))
 
 (defonce search-channel (atom nil))
@@ -118,7 +138,22 @@
   (go-loop []
     (let [search (async/<! @search-channel)]
       (when search
-        ;(log/debug "Search received")
+        (try
+          (log/debug "Search received")
+          (catch :default e
+            (log/error e)))
+        (recur)))))
+
+(defonce response-channel (atom nil))
+
+(defn process-responses []
+  (go-loop []
+    (let [response (async/<! @response-channel)]
+      (when response
+        (try 
+          (update-announcements announcements response sync-devices)
+          (catch :default e
+            (.log js/console e)))
         (recur)))))
 
 (defonce device-descriptor-channel (atom nil))
@@ -127,12 +162,18 @@
   (go-loop []
     (let [dev-desc (async/<! @device-descriptor-channel)]
       (when dev-desc
-        (log/debug "Got dev descriptor" (-> dev-desc :message :device :UDN))
-        (swap-with-effects! remote-devices
-                            (fn [devs] (assoc devs (-> dev-desc :message :device :UDN) (dev-desc :message)))
-                            (fn [devs]
-                              (doseq [svc-desc (-> dev-desc :message :device :serviceList)]
-                                (net/get-service-descriptor (dev-desc :announcement) svc-desc))))
+        (if (:error dev-desc)
+          (do
+            (log/error "Error retrieving dev desc:" dev-desc)
+            (remove-announcements announcements (:announcement dev-desc) sync-devices))
+          (do
+            (log/debug "Got dev desc:" (-> dev-desc :message :device :UDN))
+            (swap-with-effects! remote-devices
+                                (fn [devs]
+                                  (assoc devs (-> dev-desc :message :device :UDN) (:message dev-desc)))
+                                (fn [devs]
+                                  (doseq [svc-desc (-> dev-desc :message :device :serviceList)]
+                                    (net/get-service-descriptor (:announcement dev-desc) svc-desc))))))
         (recur)))))
 
 (defonce service-descriptor-channel (atom nil))
@@ -141,25 +182,32 @@
   (go-loop []
     (let [svc-desc (async/<! @service-descriptor-channel)]
       (when svc-desc
-        (log/debug "Got svc descriptor" (-> svc-desc :service-info :serviceId))
-        (swap! remote-services
-               (fn [svcs] (assoc svcs (str (get-dev-id ((-> svc-desc :announcement :message :headers) "usn"))
-                                           "::"
-                                           (-> svc-desc :service-info :serviceId))
-                                 (svc-desc :message))))
+        (if (:error svc-desc)
+          (log/error "Error while accessing service descriptor:" (:message svc-desc))
+          (do
+            (log/debug "Got svc descriptor" (-> svc-desc :service-info :serviceId))
+            (swap! remote-services
+                   (fn [svcs]
+                     (assoc svcs (create-usn
+                                  (get-dev-id ((-> svc-desc :announcement :message :headers) "usn"))
+                                  (-> svc-desc :service-info :serviceId))
+                            (svc-desc :message))))))
         (recur)))))
 
 (defn start-subscribers []
   (reset! notify-channel (async/chan))
   (reset! search-channel (async/chan))
+  (reset! response-channel (async/chan))
   (reset! device-descriptor-channel (async/chan))
   (reset! service-descriptor-channel (async/chan))
   (async/sub @parser/ssdp-publisher :NOTIFY @notify-channel)
   (async/sub @parser/ssdp-publisher :SEARCH @search-channel)
+  (async/sub @parser/ssdp-publisher :RESPONSE @response-channel)
   (async/sub @parser/descriptor-publisher :device @device-descriptor-channel)
   (async/sub @parser/descriptor-publisher :service @service-descriptor-channel)
   (process-notifications)
   (process-searches)
+  (process-responses)
   (process-device-descriptors)
   (process-service-descriptors))
 

@@ -16,20 +16,20 @@
 
 (defparser ssdp-parser
   (str/join "\n"
-            '("SSDP_MSG = START_LINE CRLF HEADERS CRLF (BODY?)"
+            '("SSDP_MSG = START_LINE HEADERS (<CRLF>+ BODY)?"
               "CRLF = '\\r\\n'"
               "SP = ' '"
-              "URL = #'[^ ]*'"
+              "REQUEST_URI = #'[^ ]*'" ; Be forgiving as possible in parsing
               "START_LINE = NOTIFY | SEARCH | SUBSCRIBE | UNSUBSCRIBE | RESPONSE"
-              "NOTIFY = 'NOTIFY' SP URL SP 'HTTP/1.1'"
-              "SEARCH = 'M-SEARCH' SP URL SP 'HTTP/1.1'"
-              "SUBSCRIBE = 'SUBSCRIBE' SP URL SP 'HTTP/1.1'"
-              "UNSUBSCRIBE = 'UNSUBSCRIBE' SP URL SP 'HTTP/1.1'"
+              "NOTIFY = 'NOTIFY' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
+              "SEARCH = 'M-SEARCH' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
+              "SUBSCRIBE = 'SUBSCRIBE' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
+              "UNSUBSCRIBE = 'UNSUBSCRIBE' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
               "RESPONSE = 'HTTP/1.1 200 OK'"
               "HEADERS = (HEADER *)"
-              "SEPERATOR = ':' #'\\s*'"
-              "HEADER = (NAME SEPERATOR VALUE CRLF)"
-              "NAME = #'[\\w\\-_\\.]*'"
+              "SEPARATOR = ':' #'[ \t]*'"
+              "HEADER = (<CRLF> NAME <SEPARATOR> VALUE)"
+              "NAME = #'[\\w\\-_\\.]+'"
               "VALUE = #'[^\\r]*'"
               "BODY = #'.*'")))
 
@@ -41,14 +41,14 @@
     (assoc channel-msg :message parse-result)))
 
 (defn error-handler [ex]
-  (log/error "Exception parsing msg" (str (js->clj ex))))
+  (.log js/console "Exception parsing msg" ex))
 
 (defn header-map [hdrs-ast]
-  (into {} (map #(let [[HEADER [NAME name] _ [VALUE value]] %] [(str/lower-case name) value])
+  (into {} (map #(let [[HEADER [NAME name] [VALUE value]] %] [(str/lower-case name) value])
                 hdrs-ast)))
 
 (defn ssdp-analyzer [parse-result]
-  (let [[SSDP_MSG [START_LINE [type]] _ [HEADERS & headers] _ body] (:message parse-result)]
+  (let [[SSDP_MSG [START_LINE [type]] [HEADERS & headers] body] (:message parse-result)]
     (log/debug "SSDP msg type" type)
     (assoc parse-result :message {:type type
                                   :headers (header-map headers)
@@ -57,9 +57,20 @@
 (defonce ssdp-message-channel (atom nil))
 (defonce ssdp-publisher (atom nil))
 
-(defn xml-parse [channel-msg]
-  ;(log/debug channel-msg)
-  (assoc channel-msg :message (xml/xml->clj (channel-msg :message))))
+(defn descriptor-parse
+  "Analyzes the response received on the descriptor-channel and performs an
+  action, depending on the state of the response. If there is no error, it replaces
+  the :message XML string with a generic xml-clj parse. Otherwise, the original
+  response is pushed through the descriptor publication so approprate action can
+  be taken on the application state."
+  [channel-msg]
+  (try
+    (if (:error channel-msg)
+      channel-msg ; push the original message with error state through the pipe...
+      (assoc channel-msg :message (xml/xml->clj (:message channel-msg))))
+    (catch :default e
+      (log/debug channel-msg)
+      (.log js/console "ERROR in xml-parse" e))))
 
 (defn xml-pair [node]
   [(:tag node) (xml-util/text node)])
@@ -72,8 +83,8 @@
   [spec]
   (fn [node]
     (into {} (reduce (fn [out child]
-                       (if-let [spec-fun (spec (child :tag))]
-                         (cons [(child :tag) (spec-fun child)] out)
+                       (if-let [spec-fun (spec (:tag child))]
+                         (cons [(:tag child) (spec-fun child)] out)
                          out))
                      '()
                      (node :content)))))
@@ -89,32 +100,32 @@
 
 (defn analyze-device-descriptor [desc]
   ((xml-map
-     {:specVersion (xml-map
-                    {:major xml-util/text :minor xml-util/text})
-      :device (xml-map
-               {:deviceType xml-util/text
-                :friendlyName xml-util/text
-                :manufacturer xml-util/text
-                :manufacturerURL xml-util/text
-                :modelDescription xml-util/text
-                :modelName xml-util/text
-                :modelNumber xml-util/text
-                :serialNumber xml-util/text
-                :UDN xml-util/text
-                :iconList (xml-list
-                           {:icon (xml-map
-                                   {:mimetype xml-util/text
-                                    :width xml-util/text
-                                    :height xml-util/text
-                                    :depth xml-util/text
-                                    :url xml-util/text})})
-                :serviceList (xml-list
-                              {:service (xml-map
-                                         {:serviceId xml-util/text
-                                          :serviceType xml-util/text
-                                          :SCPDURL xml-util/text
-                                          :controlURL xml-util/text
-                                          :eventSubURL xml-util/text})})})})
+    {:specVersion (xml-map
+                   {:major xml-util/text :minor xml-util/text})
+     :device (xml-map
+              {:deviceType xml-util/text
+               :friendlyName xml-util/text
+               :manufacturer xml-util/text
+               :manufacturerURL xml-util/text
+               :modelDescription xml-util/text
+               :modelName xml-util/text
+               :modelNumber xml-util/text
+               :serialNumber xml-util/text
+               :UDN xml-util/text
+               :iconList (xml-list
+                          {:icon (xml-map
+                                  {:mimetype xml-util/text
+                                   :width xml-util/text
+                                   :height xml-util/text
+                                   :depth xml-util/text
+                                   :url xml-util/text})})
+               :serviceList (xml-list
+                             {:service (xml-map
+                                        {:serviceId xml-util/text
+                                         :serviceType xml-util/text
+                                         :SCPDURL xml-util/text
+                                         :controlURL xml-util/text
+                                         :eventSubURL xml-util/text})})})})
    desc))
 
 (defn analyze-service-descriptor [desc]
@@ -143,13 +154,15 @@
    desc))
 
 (defn analyze-descriptor [channel-msg]
-  (let [desc (:message channel-msg)]
-    ;(log/debug desc)
-    (assoc channel-msg
-           :message (case (:tag desc)
-                      :root (analyze-device-descriptor desc)
-                      :scpd (analyze-service-descriptor desc)
-                      desc))))
+  (if (:error channel-msg)
+    channel-msg ; push the original object through the pipeline.
+    (let [desc (:message channel-msg)]
+                                        ;(log/debug desc)
+      (assoc channel-msg
+             :message (case (:tag desc)
+                        :root (analyze-device-descriptor desc)
+                        :scpd (analyze-service-descriptor desc)
+                        desc)))))
 
 (defn descriptor-descriminator [msg]
   (if (:service-info msg)
@@ -160,14 +173,19 @@
 (defonce descriptor-publisher (atom nil))
 
 (defn start-ssdp-parser []
-  (reset! ssdp-message-channel (async/chan 1 (comp (map ssdp-parse) (map ssdp-analyzer)) error-handler))
-  (reset! ssdp-publisher (async/pub @ssdp-message-channel (comp :type :message)))
-  (reset! descriptor-channel (async/chan 1 (comp (map xml-parse) (map analyze-descriptor)) error-handler))
-  (reset! descriptor-publisher (async/pub @descriptor-channel descriptor-descriminator)))
+  (reset! ssdp-message-channel
+          (async/chan 1
+                      (comp (map ssdp-parse) (map ssdp-analyzer))
+                      error-handler))
+  (reset! ssdp-publisher
+          (async/pub @ssdp-message-channel (comp :type :message)))
+  (reset! descriptor-channel
+          (async/chan 1
+                      (comp (map descriptor-parse) (map analyze-descriptor))
+                      error-handler))
+  (reset! descriptor-publisher
+          (async/pub @descriptor-channel descriptor-descriminator)))
 
 (defn stop-ssdp-parser []
   (async/close! @ssdp-message-channel)
   (async/close! @descriptor-channel))
-
-;; Sample parse:
-;[:SSDP_MSG [:START_LINE [:NOTIFY "NOTIFY" [:SP " "] [:URL "*"] [:SP " "] "HTTP/1.1"]] [:CRLF "\r\n"] [:HEADERS [:HEADER [:NAME "Host"] [:SEPERATOR ":" " "] [:VALUE "239.255.255.250:1900"] [:CRLF "\r\n"]] [:HEADER [:NAME "Cache-Control"] [:SEPERATOR ":" " "] [:VALUE "max-age=30"] [:CRLF "\r\n"]] [:HEADER [:NAME "Location"] [:SEPERATOR ":" " "] [:VALUE "http://192.168.0.1:1900/WFADevice.xml"] [:CRLF "\r\n"]] [:HEADER [:NAME "NTS"] [:SEPERATOR ":" " "] [:VALUE "ssdp:alive"] [:CRLF "\r\n"]] [:HEADER [:NAME "Server"] [:SEPERATOR ":" " "] [:VALUE "POSIX, UPnP/1.0 UPnP Stack/5.110.27.2006"] [:CRLF "\r\n"]] [:HEADER [:NAME "NT"] [:SEPERATOR ":" " "] [:VALUE "urn:schemas-wifialliance-org:service:WFAWLANConfig:1"] [:CRLF "\r\n"]] [:HEADER [:NAME "USN"] [:SEPERATOR ":" " "] [:VALUE "uuid:98408c8c-f5ce-9dbe-18bd-a8e5e6e180c0::urn:schemas-wifialliance-org:service:WFAWLANConfig:1"] [:CRLF "\r\n"]]] [:CRLF "\r\n"]]

@@ -31,6 +31,22 @@
              "ST: sddp:all"
              "USER-AGENT: OS/1.0 UPnP/2.0 product/1.0\r\n\r\n"]))
 
+(def *response-msg*
+  (str/join "\r\n"
+            ["HTTP/1.1 200 OK"
+             "CACHE-CONTROL: max-age = 50000"
+             "DATE: Fri, 26 Jan 2018 02:47:31 GMT"
+             "EXT: "
+             "LOCATION: http://example.com/desc.xml"
+             "SERVER: OS/1.0 UPnP/2.0 product/1.0"
+             "ST: ssdp:all"
+             "USN: uuid:00000000-0000-0000-0000-000000000000\r\n\r\n"]))
+
+(def *accept-malformed-msg*
+  (str/join "\r\n"
+            ["HTTP/1.1 200 OK"
+             "A-HEADER: value"]))
+
 (def *illegal-msg* "I am not a valid SSDP message")
 
 (def *expired-announcement*
@@ -78,6 +94,8 @@
 (deftest test-parse
   (is (not (nil? (parser/ssdp-parse {:message *notify-msg*}))))
   (is (not (nil? (parser/ssdp-parse {:message *search-msg*}))))
+  (is (not (nil? (parser/ssdp-parse {:message *response-msg*}))))
+  (is (not (nil? (parser/ssdp-parse {:message *accept-malformed-msg*}))))
   (try
     (parser/ssdp-parse {:message *illegal-msg*})
     (is nil "Expected error to be thrown.")

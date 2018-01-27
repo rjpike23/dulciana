@@ -12,13 +12,17 @@
             [dulciana.service.parser :as parser]
             [dulciana.service.state :as state]
             [dulciana.service.messages :as msg]
+            [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
             [source-map-support :as sms]))
 
 (nodejs/enable-util-print!)
 
+(defonce *announcement-interval* 90000)
+
 (defonce http-server (atom nil))
+(defonce timer (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -72,17 +76,33 @@
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
 
+(defn notify []
+  (log/info "Sending announcements"))
+
+(defn start-notifications [interval]
+  (reset! timer (js/setInterval notify interval)))
+
+(defn stop-notifications []
+  (when @timer
+    (js/clearInterval @timer))
+  (reset! timer nil))
+
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
 (defn setup []
-  (parser/start-ssdp-parser)
-  (state/start-subscribers)
-  (net/start-listeners)
-  (reset! http-server
-          (doto (.createServer http #(app %1 %2))
-            (.listen 3000))))
+  (try
+    (parser/start-ssdp-parser)
+    (state/start-subscribers)
+    (net/start-listeners)
+    (start-notifications *announcement-interval*)
+    (reset! http-server
+            (doto (.createServer http #(app %1 %2))
+              (.listen 3000)))
+    (catch :default e
+      (log/error "Error while starting Dulciana." e))))
 
 (defn teardown []
+  (stop-notifications)
   (net/stop-listeners)
   (state/stop-subscribers)
   (parser/stop-ssdp-parser)
