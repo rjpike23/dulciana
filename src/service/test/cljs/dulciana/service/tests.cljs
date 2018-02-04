@@ -57,13 +57,13 @@
    :message
    {:type :NOTIFY
     :headers
-    {"host" "239.255.255.250:1900"
-     "cache-control" "max-age=60"
-     "location" "http://example.com/desc.xml"
-     "nts" "ssdp:alive"
-     "server" "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
-     "nt" "uuid:abc::123"
-     "usn" "uuid:abc::123"}
+    {:host "239.255.255.250:1900"
+     :cache-control "max-age=60"
+     :location "http://example.com/desc.xml"
+     :nts "ssdp:alive"
+     :server "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
+     :nt "uuid:abc::123"
+     :usn "uuid:abc::123"}
     :body nil}
    :timestamp (js/Date. 0)})
 
@@ -75,13 +75,13 @@
    :message
    {:type :NOTIFY
     :headers
-    {"host" "239.255.255.250:1900"
-     "cache-control" "max-age=60"
-     "location" "http://example.com/desc.xml"
-     "nts" "ssdp:alive"
-     "server" "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
-     "nt" "uuid:abd::124"
-     "usn" "uuid:abd::124"}
+    {:host "239.255.255.250:1900"
+     :cache-control "max-age=60"
+     :location "http://example.com/desc.xml"
+     :nts "ssdp:alive"
+     :server "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
+     :nt "uuid:abd::124"
+     :usn "uuid:abd::124"}
     :body nil}
    :timestamp (js/Date. 10000000000000)})
 
@@ -104,7 +104,7 @@
 (deftest test-analyze
   (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*}))]
     (is (= :NOTIFY (-> notify-result :message :type)))
-    (is (= "239.255.255.250:1900" ((-> notify-result :message :headers) "host")))))
+    (is (= "239.255.255.250:1900" (-> notify-result :message :headers :host)))))
 
 (deftest remove-expired
   (is (= {"uuid:abd::124" *valid-announcement*}

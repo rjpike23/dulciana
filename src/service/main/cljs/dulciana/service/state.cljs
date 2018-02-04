@@ -16,7 +16,8 @@
 (defn swap-with-effects!
   "This function performs a swap! and conditionally executes a
   function which may have side effects, if the call to swap!
-  actually changes the referenced atom."
+  actually changes the referenced atom. Note: Investigate need
+  for this fn."
   [atom transformer side-effector]
   (let [prev @atom
         result (swap! atom transformer)]
@@ -41,7 +42,7 @@
   (str/starts-with? svcname devid))
 
 (defn create-usn
-  "Constrcuts a USN from the device id and service id."
+  "Constructs a USN from the device id and service id."
   [dev-id svc-id]
   (if svc-id
     (str dev-id "::" svc-id)
@@ -57,7 +58,7 @@
 
 (defonce local-devices (atom {}))
 
-(defn do-request [dev-id]
+(defn submit-dev-desc-request [dev-id]
   (swap-with-effects! remote-devices
                       (fn [devs] (if (@announcements dev-id)
                                       (assoc devs dev-id :pending)
@@ -76,11 +77,11 @@
                                  (apply dissoc devs remove-devs)))
                         (fn [devs]
                           (doseq [[dev-id _] (filter (fn [[k v]] (= v :new)) devs)]
-                            (do-request dev-id))))))
+                            (submit-dev-desc-request dev-id))))))
 
 (defn expiration [ann]
-  (let [timestamp (-> ann :timestamp)
-        cache-header ((-> ann :message :headers) "cache-control")
+  (let [timestamp (:timestamp ann)
+        cache-header (-> ann :message :headers :cache-control)
         age-millis (* 1000 (js/parseInt (second (first (re-seq #"max-age[ ]*=[ ]*([1234567890]*)" cache-header)))))]
     (js/Date. (+ age-millis (.getTime timestamp)))))
 
@@ -91,15 +92,17 @@
   (into {} (filter (comp not (partial expired? (js/Date.))) anns)))
 
 (defn update-announcements [announcements-atom notification side-effector]
-  (log/debug "Updating" ((-> notification :message :headers) "usn"))
   (swap-with-effects! announcements-atom
                       (fn [anns]
                         (assoc (remove-expired-announcements anns)
-                               ((-> notification :message :headers) "usn") notification))
+                               (-> notification :message :headers :usn) notification))
                       side-effector))
 
-(defn remove-announcements [announcements-atom notification side-effector]
-  (let [id (get-dev-id ((-> notification :message :headers) "usn"))]
+(defn remove-announcements
+  "Remove all announcements from state that have the same device id as the
+  supplied notification."
+  [announcements-atom notification side-effector]
+  (let [id (get-dev-id (-> notification :message :headers :usn))]
     (log/debug "Removing" id)
     (swap-with-effects! announcements-atom
                         (fn [anns]
@@ -122,12 +125,12 @@
     (let [notification (async/<! @notify-channel)]
       (when notification
         (try
-          (let [notify-type ((-> notification :message :headers) "nts")]
+          (let [notify-type (-> notification :message :headers :nts)]
             (case notify-type
               "ssdp:alive" (update-announcements announcements notification sync-devices)
               "ssdp:update" (update-announcements announcements notification sync-devices)
               "ssdp:byebye" (remove-announcements announcements notification sync-devices)
-              (log/debug "Ignoring announcement type" notify-type)))
+              (log/warn "Ignoring announcement type" notify-type)))
           (catch :default e
             (log/error e)))
         (recur)))))
@@ -139,7 +142,7 @@
     (let [search (async/<! @search-channel)]
       (when search
         (try
-          (log/debug "Search received")
+          (log/trace "Search received" search)
           (catch :default e
             (log/error e)))
         (recur)))))
@@ -185,11 +188,11 @@
         (if (:error svc-desc)
           (log/error "Error while accessing service descriptor:" (:message svc-desc))
           (do
-            (log/debug "Got svc descriptor" (-> svc-desc :service-info :serviceId))
+            (log/debug "Got svc desc" (-> svc-desc :service-info :serviceId))
             (swap! remote-services
                    (fn [svcs]
                      (assoc svcs (create-usn
-                                  (get-dev-id ((-> svc-desc :announcement :message :headers) "usn"))
+                                  (get-dev-id (-> svc-desc :announcement :message :headers :usn))
                                   (-> svc-desc :service-info :serviceId))
                             (svc-desc :message))))))
         (recur)))))

@@ -24,19 +24,22 @@
 (def ssdp-port 1900)
 
 ;;; Networking module state vars:
+;;; Map of open sockets:
 (defonce sockets (atom {}))
 
 (defn get-ifaces
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
   []
   (filter #(not (% :internal))
-          (flatten (map (fn [[k v]] v) (js->clj (os/networkInterfaces) :keywordize-keys true)))))
+          (flatten (map (fn [[k v]] v)
+                        (js->clj (os/networkInterfaces) :keywordize-keys true)))))
 
 ;;; Multicast message sender:
 (defn send-ssdp-message
   "Sends a multicast message from the supplied interface. A socket for the interface should have previously
   been opened with net/start-listener. See nodejs dgram.send()."
   [iface message]
+  (log/trace "Sending SSDP message" message)
   (when-let [socket (@sockets (iface :address))]
     (.send socket message ssdp-port (ssdp-mcast-addresses (iface :family)))))
 
@@ -49,14 +52,14 @@
 (defn handle-ssdp-error
   "Callback for socket errors returned from NodeJS datagram API."
   [iface socket exception]
-  (log/error "Socket error!" exception)
+  (log/error exception "Socket error!")
   (.close socket))
 
 (defn handle-ssdp-message [iface socket msg remote-js]
   "Callback for messages received on the SSDP multicast socket.
   pushes messages onto the ssdp-message-channel, with metadata."
   (let [remote (js->clj remote-js :keywordize-keys true)]
-    (log/debug "Dgram rcvd" (:address remote))
+    (log/trace "Dgram rcvd" (:address remote) (.toString msg))
     (go (>! @parser/ssdp-message-channel {:remote remote
                                           :interface iface
                                           :timestamp (js/Date.)
@@ -65,54 +68,66 @@
 (defn handle-ssdp-socket-close
   "Callback for socket close events generated from NodeJS datagram API."
   [iface socket]
-  (log/debug "Socket closed")
-  (swap! sockets dissoc (iface :address)))
+  (log/debug "Socket closed" (:address iface))
+  (swap! sockets dissoc (:address iface)))
 
 (defn handle-ssdp-socket-listening
   "Callback for socket listening events generated from NodeJS datagram API.
   This implementation adds the socket to the SSDP multicast group, and
   updates the sockets var to include the new socket."
   [iface socket]
-  (log/debug "Socket listening, adding iface to multicast group" (iface :address))
+  (log/debug "Socket listening, adding iface to multicast group" (:address iface))
   (.addMembership socket
-                  (ssdp-mcast-addresses (iface :family))
-                  (iface :address))
-  (swap! sockets assoc (iface :address) socket)
+                  (ssdp-mcast-addresses (:family iface))
+                  (:address iface))
+  (swap! sockets assoc (:address iface) socket)
+  (log/info "Listening for SSDP messages on" (:address iface))
   (send-ssdp-search-message iface))
 
-;;; HTTP methods for sending requests for descriptors / SOAP requests below:
-(defn get-device-descriptor [device-announcement]
-  ;(log/debug "Getting descriptor for:" device-announcement)
-  (ajax/GET ((-> device-announcement :message :headers) "location")
-            {:handler #(go (>! @parser/descriptor-channel {:announcement device-announcement
-                                                           :timestamp (js/Date.)
-                                                           :error false
-                                                           :message %}))
-             :error-handler #(go (>! @parser/descriptor-channel {:announcement device-announcement
-                                                                 :timestamp (js/Date.)
-                                                                 :error true
-                                                                 :message %}))}))
+(defn handle-descriptor-response
+  "Result handler for both device and service descriptor responses. Pumps
+  a result object into the supplied channel."
+  [chan error-flag announcement service-info msg]
+  (log/trace "Desc rcvd" msg)
+  (let [result {:timestamp (js/Date.), :error error-flag,
+                :announcement announcement, :message msg}]
+    (go
+      (>! chan
+          (if service-info
+            (assoc result :service-info service-info)
+            result)))))
 
-(defn get-service-descriptor [device-announcement service-info]
-  (let [scpdurl (url/resolve ((-> device-announcement :message :headers) "location") (service-info :SCPDURL))]
+;;; HTTP methods for sending requests for descriptors / SOAP requests below:
+(defn get-device-descriptor
+  "Sends HTTP request to get the descriptor for the device specified in the
+  supplied announcement. The response is pumped into the descriptor-channel."
+  [device-announcement]
+  (log/trace "Fetching dev desc" device-announcement)
+  (ajax/GET (-> device-announcement :message :headers :location)
+            {:handler (partial handle-descriptor-response
+                               @parser/descriptor-channel false device-announcement nil)
+             :error-handler (partial handle-descriptor-response
+                                     @parser/descriptor-channel true device-announcement nil)}))
+
+(defn get-service-descriptor
+  "Sends HTTP request to get the descriptor for the service specified in the
+  supplied device-announcement and service-info objects. The response is
+  pumped into the descriptor channel."
+  [device-announcement service-info]
+  (log/trace "Fetching svc desc" service-info)
+  (let [scpdurl (url/resolve (-> device-announcement :message :headers :location) (service-info :SCPDURL))]
     (ajax/GET scpdurl
-              {:handler #(go (>! @parser/descriptor-channel {:announcement device-announcement
-                                                             :service-info service-info
-                                                             :timestamp (js/Date.)
-                                                             :error false
-                                                             :message %}))
-               :error-heandler #(go (>! @parser/descriptor-channel {:announcement device-announcement
-                                                                    :service-info service-info
-                                                                    :timestamp (js/Date.)
-                                                                    :error true
-                                                                    :message %}))})))
+              {:handler (partial handle-descriptor-response
+                                 @parser/descriptor-channel false device-announcement service-info)
+               :error-heandler (partial handle-descriptor-response
+                                        @parser/descriptor-channel true device-announcement service-info)})))
 
 (defn send-control-request [url service-type action-name params]
   (let [msg (messages/emit-control-soap-msg service-type action-name params)
         hdrs {"USER-AGENT" "Unix/5.0 UPnP/2.0 dulciana/1.0"
               "SOAPACTION" (str "\"" service-type "#" action-name "\"")}]
-    (ajax.core/POST url {:body msg
-                         :headers hdrs})))
+    (ajax/POST url {:body msg
+                    :headers hdrs})))
 
 ;;; Following functions are used to init/teardown the SSDP multicast listeners.
 (defn start-listener
@@ -129,8 +144,6 @@
     socket))
 
 (defn start-listeners []
-  ; On windows we need to iterate all external interfaces and start multicast
-  ; on all of them. UNIX/Linux will correctly listen on * with a single call.
   (doseq [iface (get-ifaces)]
     (start-listener iface)))
 

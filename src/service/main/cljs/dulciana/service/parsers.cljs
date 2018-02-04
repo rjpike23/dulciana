@@ -33,26 +33,37 @@
               "VALUE = #'[^\\r]*'"
               "BODY = #'.*'")))
 
-(defn ssdp-parse [channel-msg]
+(defn ssdp-parse
+  "Parses an incoming SSDP message into a simple AST as defined by the grammar above.
+  Returns the original object with the :message key replaced with the AST."
+  [channel-msg]
   (let [parse-result (ssdp-parser (:message channel-msg))]
     (when (parser/failure? parse-result)
-      (log/error "Error" parse-result)
       (throw (js/Error. parse-result)))
-    (assoc channel-msg :message parse-result)))
+    (log/spy :trace "SSDP parser out"
+             (assoc channel-msg :message parse-result))))
 
-(defn error-handler [ex]
-  (.log js/console "Exception parsing msg" ex))
+(defn error-handler
+  "Logs the supplied error."
+  [ex]
+  (log/error ex "Exception parsing msg"))
 
-(defn header-map [hdrs-ast]
-  (into {} (map #(let [[HEADER [NAME name] [VALUE value]] %] [(str/lower-case name) value])
+(defn header-map
+  "Converts an AST of SSDP headers into a key value map."
+  [hdrs-ast]
+  (into {} (map #(let [[HEADER [NAME name] [VALUE value]] %]
+                   [(keyword (str/lower-case name)) value])
                 hdrs-ast)))
 
-(defn ssdp-analyzer [parse-result]
+(defn ssdp-analyzer
+  "Analyzes the AST from the parser, extracting values and converting to a map.
+  Returns the supplied object, with the :message key replaced with the new data structure."
+  [parse-result]
   (let [[SSDP_MSG [START_LINE [type]] [HEADERS & headers] body] (:message parse-result)]
-    (log/debug "SSDP msg type" type)
-    (assoc parse-result :message {:type type
-                                  :headers (header-map headers)
-                                  :body body})))
+    (log/spy :trace "SSDP anlzr out"
+             (assoc parse-result :message {:type type
+                                           :headers (header-map headers)
+                                           :body body}))))
 
 (defonce ssdp-message-channel (atom nil))
 (defonce ssdp-publisher (atom nil))
@@ -65,15 +76,12 @@
   be taken on the application state."
   [channel-msg]
   (try
-    (if (:error channel-msg)
-      channel-msg ; push the original message with error state through the pipe...
-      (assoc channel-msg :message (xml/xml->clj (:message channel-msg))))
+    (log/spy :trace "Desc parser out"
+             (if (:error channel-msg)
+               channel-msg ; push the original message with error state through the pipe...
+               (assoc channel-msg :message (xml/xml->clj (:message channel-msg)))))
     (catch :default e
-      (log/debug channel-msg)
-      (.log js/console "ERROR in xml-parse" e))))
-
-(defn xml-pair [node]
-  [(:tag node) (xml-util/text node)])
+      (log/error e "Unexpected error parsing descriptor" channel-msg))))
 
 (defn xml-map
   "Returns a function that converts an xml->clj data structure into a map {:<tag-name> <content>},
@@ -89,7 +97,12 @@
                      '()
                      (node :content)))))
 
-(defn xml-list [spec]
+(defn xml-list
+  "Returns a function that converts an xml-clj data structure into a list, based
+  on the supplied 'spec'. The spec is a map of keywords to functions. If the
+  tag of the child element is a member of the spec map, the associated function
+  is called on the child element."
+  [spec]
   (fn [node]
     (reduce (fn [out child]
               (if-let [spec-fun (spec (child :tag))]
@@ -98,7 +111,10 @@
             '()
             (node :content))))
 
-(defn analyze-device-descriptor [desc]
+(defn analyze-device-descriptor
+  "Performs an analysis on the supplied parsed device descriptor and converts it into
+  a form that is easier to use."
+  [desc]
   ((xml-map
     {:specVersion (xml-map
                    {:major xml-util/text :minor xml-util/text})
@@ -128,43 +144,55 @@
                                          :eventSubURL xml-util/text})})})})
    desc))
 
-(defn analyze-service-descriptor [desc]
-  ((xml-map {:specVersion (xml-map
-                           {:major xml-util/text :minor xml-util/text})
-             :actionList (xml-list
-                          {:action (xml-map
-                                    {:name xml-util/text
-                                     :argumentList (xml-list
-                                                    {:argument (xml-map
-                                                                {:name xml-util/text
-                                                                 :direction xml-util/text
-                                                                 :relatedStateVariable xml-util/text
-                                                                 :retval (constantly true)})})})})
-             :serviceStateTable (xml-list
-                                 {:stateVariable (xml-map
-                                                  {:name xml-util/text
-                                                   :datatype xml-util/text
-                                                   :defaultValue xml-util/text
-                                                   :allowedValueRange (xml-map
-                                                                       {:minimum xml-util/text
-                                                                        :maximum xml-util/text
-                                                                        :step xml-util/text})
-                                                   :allowedValueList (xml-list
-                                                                      {:allowedValue xml-util/text})})})})
+(defn analyze-service-descriptor
+  "Performs an analysis on the supplied parsed service descriptor and converts
+  it into a form that is easier to use."
+  [desc]
+  ((xml-map
+    {:specVersion (xml-map
+                   {:major xml-util/text :minor xml-util/text})
+     :actionList (xml-list
+                  {:action (xml-map
+                            {:name xml-util/text
+                             :argumentList (xml-list
+                                            {:argument (xml-map
+                                                        {:name xml-util/text
+                                                         :direction xml-util/text
+                                                         :relatedStateVariable xml-util/text
+                                                         :retval (constantly true)})})})})
+     :serviceStateTable (xml-list
+                         {:stateVariable (xml-map
+                                          {:name xml-util/text
+                                           :datatype xml-util/text
+                                           :defaultValue xml-util/text
+                                           :allowedValueRange (xml-map
+                                                               {:minimum xml-util/text
+                                                                :maximum xml-util/text
+                                                                :step xml-util/text})
+                                           :allowedValueList (xml-list
+                                                              {:allowedValue xml-util/text})})})})
    desc))
 
-(defn analyze-descriptor [channel-msg]
-  (if (:error channel-msg)
-    channel-msg ; push the original object through the pipeline.
-    (let [desc (:message channel-msg)]
-                                        ;(log/debug desc)
-      (assoc channel-msg
-             :message (case (:tag desc)
-                        :root (analyze-device-descriptor desc)
-                        :scpd (analyze-service-descriptor desc)
-                        desc)))))
+(defn analyze-descriptor
+  "Performs an analysis on the supplied message from the descriptor
+  channel, breaking the parsed xml structures into easier to manage
+  pieces. If the error flag is true, we just pass the original
+  object through."
+  [channel-msg]
+  (log/spy :trace "Desc anlzr out"
+           (if (:error channel-msg)
+             channel-msg ; push the original object through the pipeline.
+             (let [desc (:message channel-msg)]
+               (assoc channel-msg
+                      :message (case (:tag desc)
+                                 :root (analyze-device-descriptor desc)
+                                 :scpd (analyze-service-descriptor desc)
+                                 desc))))))
 
-(defn descriptor-descriminator [msg]
+(defn descriptor-discriminator
+  "Given a message from the descriptor channel, this function discriminates
+  whether it is a device descriptor or service descriptor."
+  [msg]
   (if (:service-info msg)
     :service
     :device))
@@ -184,7 +212,7 @@
                       (comp (map descriptor-parse) (map analyze-descriptor))
                       error-handler))
   (reset! descriptor-publisher
-          (async/pub @descriptor-channel descriptor-descriminator)))
+          (async/pub @descriptor-channel descriptor-discriminator)))
 
 (defn stop-ssdp-parser []
   (async/close! @ssdp-message-channel)
