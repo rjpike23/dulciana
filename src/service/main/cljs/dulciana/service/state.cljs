@@ -79,14 +79,9 @@
                           (doseq [[dev-id _] (filter (fn [[k v]] (= v :new)) devs)]
                             (submit-dev-desc-request dev-id))))))
 
-(defn expiration [ann]
-  (let [timestamp (:timestamp ann)
-        cache-header (-> ann :message :headers :cache-control)
-        age-millis (* 1000 (js/parseInt (second (first (re-seq #"max-age[ ]*=[ ]*([1234567890]*)" cache-header)))))]
-    (js/Date. (+ age-millis (.getTime timestamp)))))
 
 (defn expired? [now [key ann]]
-  (< (expiration ann) now))
+  (< (:expiration ann) now))
 
 (defn remove-expired-announcements [anns]
   (into {} (filter (comp not (partial expired? (js/Date.))) anns)))

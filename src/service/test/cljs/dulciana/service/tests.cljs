@@ -65,7 +65,7 @@
      :nt "uuid:abc::123"
      :usn "uuid:abc::123"}
     :body nil}
-   :timestamp (js/Date. 0)})
+   :expiration (js/Date. 0)})
 
 (def *valid-announcement*
   {:remote
@@ -83,7 +83,7 @@
      :nt "uuid:abd::124"
      :usn "uuid:abd::124"}
     :body nil}
-   :timestamp (js/Date. 10000000000000)})
+   :expiration (js/Date. 10000000000000)})
 
 (def *announcements*
   {"uuid:abc::123" *expired-announcement*
@@ -102,7 +102,8 @@
     (catch js/Error e nil)))
 
 (deftest test-analyze
-  (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*}))]
+  (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*
+                                                                :timestamp (js/Date. 0)}))]
     (is (= :NOTIFY (-> notify-result :message :type)))
     (is (= "239.255.255.250:1900" (-> notify-result :message :headers :host)))))
 

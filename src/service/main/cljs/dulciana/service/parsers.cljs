@@ -55,15 +55,26 @@
                    [(keyword (str/lower-case name)) value])
                 hdrs-ast)))
 
+(defn set-expiration [ann]
+  (let [timestamp (:timestamp ann)
+        cache-header (-> ann :message :headers :cache-control)]
+    (if cache-header
+      (let [age-millis (* 1000 (js/parseInt
+                                (second (first (re-seq #"max-age[ ]*=[ ]*([1234567890]*)"
+                                                       cache-header)))))]
+        (assoc ann :expiration (js/Date. (+ age-millis (.getTime timestamp)))))
+      ann)))
+
 (defn ssdp-analyzer
   "Analyzes the AST from the parser, extracting values and converting to a map.
   Returns the supplied object, with the :message key replaced with the new data structure."
   [parse-result]
   (let [[SSDP_MSG [START_LINE [type]] [HEADERS & headers] body] (:message parse-result)]
     (log/spy :trace "SSDP anlzr out"
-             (assoc parse-result :message {:type type
-                                           :headers (header-map headers)
-                                           :body body}))))
+             (set-expiration
+              (assoc parse-result :message {:type type
+                                            :headers (header-map headers)
+                                            :body body})))))
 
 (defonce ssdp-message-channel (atom nil))
 (defonce ssdp-publisher (atom nil))
