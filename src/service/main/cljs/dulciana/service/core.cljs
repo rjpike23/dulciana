@@ -77,7 +77,7 @@
               (. res (redirect "/upnp/devices")))))
 
 (defn notify []
-  (log/info "Sending announcements"))
+  (log/trace "Sending announcements"))
 
 (defn start-notifications [interval]
   (reset! timer (js/setInterval notify interval)))
