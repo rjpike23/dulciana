@@ -6,6 +6,7 @@
 
 (ns ^:figwheel-always dulciana.service.tests
   (:require [clojure.string :as str]
+            [dulciana.service.spec :as dulc-spec]
             [dulciana.service.core :as core]
             [dulciana.service.parser :as parser]
             [dulciana.service.messages :as msg]

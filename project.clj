@@ -12,6 +12,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/clojurescript "1.9.946"]
                  [org.clojure/core.async "0.4.474"]
+                 [org.clojure/test.check "0.9.0"]
                  [org.clojure/data.xml "0.2.0-alpha5"]
                  [binaryage/devtools "0.9.9"]
                  [lein-cljsbuild "1.1.7"]
