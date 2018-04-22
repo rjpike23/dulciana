@@ -51,18 +51,27 @@
                          {:host pub-host
                           :sid sid}))
 
-(defn emit-control-msg-param [[name value]]
-  (str "<" name ">" value "</" name ">"))
+(defn emit-prop-val-xml [[n v]]
+  (str "<" (name n) ">" v "</" (name n) ">"))
 
 (defn emit-control-soap-msg [service-type action-name params]
-  (str "<?xml version=\"1.0\"?>\n\r"
+  (str "<?xml version=\"1.0\"?>\r\n"
        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
        "<s:Body>"
        "<u:" action-name " xmlns:u=\"" service-type "\">"
-       (apply str (map emit-control-msg-param params))
+       (apply str (map emit-prop-val-xml params))
        "</u:" action-name ">"
        "</s:Body>"
        "</s:Envelope>"))
 
-(defn emit-event-soap-msg [])
+(defn emit-event-prop-xml [[name value]]
+  (str "<s:property>"
+       (emit-prop-val-xml [name value])
+       "</s:property>"))
+
+(defn emit-event-msg [prop-values]
+  (str "<?xml version=\"1.0\"?>\r\n"
+       "<s:propertyset xmlns:s=\"urn:schemas-upnp-org:event-1-0\">"
+       (apply str (map emit-event-prop-xml prop-values))
+       "</s:propertyset>"))

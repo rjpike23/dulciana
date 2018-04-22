@@ -5,13 +5,18 @@
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 (ns ^:figwheel-always dulciana.service.tests
-  (:require [clojure.string :as str]
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
+  (:require [cljs.core.async :as async]
+            [clojure.string :as str]
+            [taoensso.timbre :as log :include-macros true]
             [dulciana.service.spec :as dulc-spec]
             [dulciana.service.core :as core]
+            [dulciana.service.events :as event]
             [dulciana.service.parser :as parser]
             [dulciana.service.messages :as msg]
             [dulciana.service.state :as state]
-            [cljs.test :refer-macros [deftest is testing run-tests]]))
+            [cljs.test :refer-macros [async deftest is testing run-tests]]
+            [events :as node-events]))
 
 (def *notify-msg*
   (str/join "\r\n"
@@ -100,7 +105,7 @@
   (try
     (parser/ssdp-parse {:message *illegal-msg*})
     (is nil "Expected error to be thrown.")
-    (catch js/Error e nil)))
+    (catch :default e nil)))
 
 (deftest test-analyze
   (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*
@@ -117,5 +122,43 @@
          (state/remove-announcements (atom *announcements*) *valid-announcement* (constantly nil))))
   (is (= {"uuid:abd::124" *valid-announcement*}
          (state/remove-announcements (atom *announcements*) *expired-announcement* (constantly nil)))))
+
+(deftest event-listen
+  (let [event-emitter (node-events/EventEmitter.)
+        chans (event/listen* event-emitter ["foo" "bar"])]
+    (async done
+     (is event-emitter)
+     (is (and (chans "foo") (chans "bar")))
+     (go
+       (is (= [1 2 3] (async/<! (chans "foo"))))
+       (done))
+     (.emit event-emitter "foo" 1 2 3)
+     (doseq [c (vals chans)] (async/close! c)))))
+
+(deftest slurp
+  (let [event-emitter (node-events/EventEmitter.)
+        out (async/chan)]
+    (async done
+           (event/slurp out event-emitter)
+           (doseq [x ["a" "b" "c" "d"]]
+             (.emit event-emitter "data" x))
+           (.emit event-emitter "end")
+           (go
+             (is (= "abcd" (async/<! out)))
+             (is (nil? (async/<! out)))
+             (done)))))
+
+(deftest slurp-error
+  (let [event-emitter (node-events/EventEmitter.)
+        out (async/chan)]
+    (async done
+           (event/slurp out event-emitter)
+           (.emit event-emitter "data" "abcd")
+           (.emit event-emitter "error" (js/Error. "Expected error."))
+           (go
+             (is (= js/Error (type (async/<! out))))
+             (is (= "abcd" (async/<! out)))
+             (is (nil? (async/<! out)))
+             (done)))))
 
 (run-tests)

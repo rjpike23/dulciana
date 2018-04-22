@@ -5,15 +5,18 @@
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 (ns dulciana.service.net
-  (:require-macros [cljs.core.async.macros :refer [go]])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.nodejs :as nodejs]
-            [cljs.core.async :refer [>!]]
+            [cljs.core.async :as async]
             [ajax.core :as ajax]
             [taoensso.timbre :as log :include-macros true]
+            [dulciana.service.events :as events]
             [dulciana.service.parser :as parser]
             [dulciana.service.messages :as messages]
             [os :as os]
             [dgram :as dgram]
+            [http :as http]
+            [net :as net]
             [url :as url]))
 
 ;;; Define SSDP protocol networking constants:
@@ -22,17 +25,20 @@
 (def ssdp-protocols {"IPv4" "udp4"
                      "IPv6" "udp6"})
 (def ssdp-port 1900)
+(def event-server-port 3200)
 
 ;;; Networking module state vars:
 ;;; Map of open sockets:
 (defonce sockets (atom {}))
 
+;;; HTTP server socket for eventing:
+(defonce event-server (atom {}))
+
 (defn get-ifaces
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
   []
   (filter #(not (% :internal))
-          (flatten (map (fn [[k v]] v)
-                        (js->clj (os/networkInterfaces) :keywordize-keys true)))))
+          (flatten (vals (js->clj (os/networkInterfaces) :keywordize-keys true)))))
 
 ;;; Multicast message sender:
 (defn send-ssdp-message
@@ -48,6 +54,44 @@
   [iface]
   (send-ssdp-message iface (messages/emit-m-search-msg)))
 
+(defn send-http-request
+  "Retuns a channel."
+  [method host port path headers body]
+  (let [options {:hostname host
+                 :port port
+                 :path path
+                 :method method
+                 :headers headers}
+        result-chan (async/chan)
+        req (.request http (clj->js options) (partial events/slurp result-chan))]
+    (.end req body)
+    result-chan))
+
+;;; Handler for SSDP pub-sub events
+(defn respond [response code message]
+  (set! (.-statusCode response) code)
+  (set! (.-statusMessage response) message)
+  (.end response))
+
+(defn handle-pub-server-request
+  "Callback for when a pub-sub data event is received from an active socket."
+  [request response]
+  (log/debug "UPnP server received" (.-method request) "request")
+  (case (.-method request)
+    "NOTIFY" (let [c (async/chan 1 (map (fn [msg]
+                                          {:message {:type :NOTIFY
+                                                     :body msg
+                                                     :headers (js->clj (.-headers request)
+                                                                       :keywordize-keys true)}
+                                           :ok #(respond response 200 "OK")
+                                           :error (partial respond response)})))]
+               (events/slurp c request)
+               (async/pipe c @parser/ssdp-event-channel false))
+    (do
+      (log/warn "UPnP server ignoring" (.-method request) "request")
+      (.writeHead response 405 "Method Not Allowed" (clj->js {"Allow" "NOTIFY"}))
+      (.end response "Method not allowed."))))
+
 ;;; Datagram event handlers follow:
 (defn handle-ssdp-error
   "Callback for socket errors returned from NodeJS datagram API."
@@ -60,7 +104,7 @@
   pushes messages onto the ssdp-message-channel, with metadata."
   (let [remote (js->clj remote-js :keywordize-keys true)]
     (log/trace "Dgram rcvd" (:address remote) (.toString msg))
-    (go (>! @parser/ssdp-message-channel {:remote remote
+    (go (async/>! @parser/ssdp-message-channel {:remote remote
                                           :interface iface
                                           :timestamp (js/Date.)
                                           :message (.toString msg)}))))
@@ -129,6 +173,29 @@
     (ajax/POST url {:body msg
                     :headers hdrs})))
 
+;;; Fns to manage the HTTP server which supports eventing.
+(defn start-event-server
+  ""
+  []
+  (let [server (.createServer http)
+        evt-channels (events/listen* server ["request" "close"])]
+    (log/info "Starting event server.")
+    (go-loop []
+      (let [req (async/<! (evt-channels "request"))]
+           (when req
+             (apply handle-pub-server-request req)
+             (recur))))
+    (go (async/<! (evt-channels "close"))
+        (map async/close! (vals evt-channels))
+        (log/info "Event server closed."))
+    (.listen server event-server-port)
+    (reset! event-server server)))
+
+(defn stop-event-server
+  ""
+  []
+  (.close @event-server))
+
 ;;; Following functions are used to init/teardown the SSDP multicast listeners.
 (defn start-listener
   "Creates a new multicast socket on the supplied interface. "
@@ -147,5 +214,6 @@
   (doseq [iface (get-ifaces)]
     (start-listener iface)))
 
-(defn stop-listeners []
-  (doseq [[k socket] @sockets] (.close socket)))
+(defn stop-listeners [sockets]
+  (doseq [[k socket] sockets]
+    (.close socket)))

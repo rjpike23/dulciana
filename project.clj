@@ -7,10 +7,10 @@
 (defproject dulciana "0.0.0-SNAPSHOT"
   :description "DLNA server built with Clojurescript, targeted at NodeJS."
   :url "http://www.dulciana.net"
-  :license {:name "I dunno"
-            :url "http://www.license.net/"}
+  :license {:name "Mozilla Public License, v 2.0"
+            :url "http://mozilla.org/MPL/2.0/"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/clojurescript "1.9.946"]
+                 [org.clojure/clojurescript "1.10.238"]
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/test.check "0.9.0"]
                  [org.clojure/data.xml "0.2.0-alpha5"]
@@ -47,6 +47,7 @@
                                                :source-map-support "0.5.0"
                                                :ws "3.2.0"
                                                :sax "1.2.2"
+                                               :xmldom "0.1.27"
                                                "@pupeno/xmlhttprequest" "1.7.0"}}}
                        {:id "fig-client"
                         :source-paths ["src/client/main/cljs" "src/client/test/cljs"]

@@ -39,14 +39,14 @@
   [channel-msg]
   (let [parse-result (ssdp-parser (:message channel-msg))]
     (when (parser/failure? parse-result)
-      (throw (js/Error. parse-result)))
+      (throw parse-result))
     (log/spy :trace "SSDP parser out"
              (assoc channel-msg :message parse-result))))
 
 (defn error-handler
   "Logs the supplied error."
   [ex]
-  (log/error ex "Exception parsing msg"))
+  (log/error "Exception parsing msg:\n" ex))
 
 (defn header-map
   "Converts an AST of SSDP headers into a key value map."
@@ -77,6 +77,7 @@
                                             :body body})))))
 
 (defonce ssdp-message-channel (atom nil))
+(defonce ssdp-event-channel (atom nil))
 (defonce ssdp-publisher (atom nil))
 
 (defn descriptor-parse
@@ -99,12 +100,14 @@
   according to the supplied spec. spec is a map from a tag keyword to a function of a single argument.
   When a child node with a tag name appearing in the spec map is found, the corresponding function is
   called with the node as argument. The return value is used as the <content> in the resulting map."
-  [spec]
+  [spec & {:keys [include-unspec-elt] :or {:include-unspec-elt false}}]
   (fn [node]
     (into {} (reduce (fn [out child]
                        (if-let [spec-fun (spec (:tag child))]
                          (cons [(:tag child) (spec-fun child)] out)
-                         out))
+                         (if include-unspec-elt
+                           (cons [(:tag child) (xml-util/text child)] out)
+                           out)))
                      '()
                      (node :content)))))
 
@@ -208,6 +211,48 @@
     :service
     :device))
 
+;; Hack city, next 2 functions. data.xml does not support node-js and
+;; tubax does not support xml namespaces, so gotta do this mess:
+(defn ns-map [attrs]
+  (into {}
+        (map (fn [[k v]]
+               [(subs (name k) (count "xmlns:")) v])
+             (filter (fn [[k v]] (str/starts-with? (name k) "xmlns"))
+                          attrs))))
+
+;; Converts namespace qualified tag keywords to arrays, [prefix tag ns-uri].
+;; Only for tags, not attributes.
+(defn munge-namespaces [xml ns-ctx]
+  (if (and (map? xml) (:tag xml))
+    (let [ns-cur (merge ns-ctx (ns-map (:attributes xml)))
+          tag-split (str/split (name (:tag xml)) ":")
+          result (assoc xml :content (map (fn [x] (munge-namespaces x ns-cur))
+                                          (:content xml)))]
+      (if (> (count tag-split) 1)
+        (let [ns-uri (ns-cur (first tag-split))]
+          (if ns-uri
+            (assoc result :tag [(second tag-split) ns-uri])
+            result))
+        result))
+    xml))
+
+(defn event-parse [msg]
+  (try
+    (assoc msg :message {:body (xml/xml->clj (-> msg :message :body))
+                         :type :NOTIFY
+                         :headers (-> msg :message :headers)})
+    (catch :default e
+      ((:error msg) 400 "Malformed message")
+      (throw e))))
+
+(defn event-analyzer [msg]
+  (let [m (munge-namespaces (-> msg :message :body) {})]
+    (assoc msg :message {:body ((xml-list
+                                 {["property" "urn:schemas-upnp-org:event-1-0"] (xml-map {} :include-unspec-elt true)})
+                                m)
+                         :type :NOTIFY
+                         :headers (-> msg :message :headers)})))
+
 (defonce descriptor-channel (atom nil))
 (defonce descriptor-publisher (atom nil))
 
@@ -216,8 +261,13 @@
           (async/chan 1
                       (comp (map ssdp-parse) (map ssdp-analyzer))
                       error-handler))
+  (reset! ssdp-event-channel
+          (async/chan 1
+                      (comp (map event-parse) (map event-analyzer))
+                      error-handler))
   (reset! ssdp-publisher
-          (async/pub @ssdp-message-channel (comp :type :message)))
+          (async/pub (async/merge [@ssdp-message-channel @ssdp-event-channel])
+                     (comp :type :message)))
   (reset! descriptor-channel
           (async/chan 1
                       (comp (map descriptor-parse) (map analyze-descriptor))
@@ -227,4 +277,5 @@
 
 (defn stop-ssdp-parser []
   (async/close! @ssdp-message-channel)
+  (async/close! @ssdp-event-channel)
   (async/close! @descriptor-channel))

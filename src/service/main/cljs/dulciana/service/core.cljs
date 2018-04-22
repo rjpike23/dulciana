@@ -103,7 +103,7 @@
 
 (defn teardown []
   (stop-notifications)
-  (net/stop-listeners)
+  (net/stop-listeners @net/sockets)
   (state/stop-subscribers)
   (parser/stop-ssdp-parser)
   (.close @http-server))

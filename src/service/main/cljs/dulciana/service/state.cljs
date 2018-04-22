@@ -67,6 +67,8 @@
 
 (defonce local-devices (atom {}))
 
+(defonce subscriptions (atom {}))
+
 (defn submit-dev-desc-request [dev-id]
   (swap-with-effects! remote-devices
                       (fn [devs] (if (@announcements dev-id)
@@ -110,8 +112,6 @@
                                            (remove-expired-announcements anns))))
                         side-effector)))
 
-
-
 (defonce sessions (atom {}))
 
 (defn channel-driver [chan handler]
@@ -132,7 +132,10 @@
       "ssdp:alive" (update-announcements announcements notification sync-devices)
       "ssdp:update" (update-announcements announcements notification sync-devices)
       "ssdp:byebye" (remove-announcements announcements notification sync-devices)
-      (log/warn "Ignoring announcement type" notify-type))))
+      "upnp:propchange" (do (log/debug "Got an EVENT!" notification)
+                            ((:ok notification)))
+      (do (log/warn "Ignoring announcement type" notify-type)
+          ((:error notification) 412 "Invalid NTS header")))))
 
 (defonce search-channel (atom nil))
 
