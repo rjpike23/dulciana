@@ -115,7 +115,7 @@
 
 (deftest remove-expired
   (is (= {"uuid:abd::124" *valid-announcement*}
-         (state/remove-expired-announcements *announcements*))))
+         (state/remove-expired-items *announcements*))))
 
 (deftest remove-announcement
   (is (= {}

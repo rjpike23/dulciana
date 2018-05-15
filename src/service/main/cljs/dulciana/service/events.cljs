@@ -7,7 +7,8 @@
 (ns dulciana.service.events
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.core.async :as async]
-            [taoensso.timbre :as log :include-macros true]))
+            [taoensso.timbre :as log :include-macros true]
+            [events :as node-events]))
 
 (defn listen
   ([src event] (listen src event (async/chan)))
@@ -43,9 +44,9 @@
 
 (defn pump [c e n]
   (async/go-loop []
-    (let [x (async<! c)]
+    (let [x (async/<! c)]
       (when x
-        (apply #(.emit e) n (async/<! c))
+        (apply #(.emit e) n x)
         (recur)))))
 
 (defn event-emitter

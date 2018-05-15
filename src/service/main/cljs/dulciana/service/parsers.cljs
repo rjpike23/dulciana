@@ -39,6 +39,7 @@
   [channel-msg]
   (let [parse-result (ssdp-parser (:message channel-msg))]
     (when (parser/failure? parse-result)
+      (log/debug "Error parsing" (:message channel-msg))
       (throw parse-result))
     (log/spy :trace "SSDP parser out"
              (assoc channel-msg :message parse-result))))
@@ -247,9 +248,9 @@
 
 (defn event-analyzer [msg]
   (let [m (munge-namespaces (-> msg :message :body) {})]
-    (assoc msg :message {:body ((xml-list
-                                 {["property" "urn:schemas-upnp-org:event-1-0"] (xml-map {} :include-unspec-elt true)})
-                                m)
+    (assoc msg :message {:body (apply merge ((xml-list
+                                              {["property" "urn:schemas-upnp-org:event-1-0"] (xml-map {} :include-unspec-elt true)})
+                                             m))
                          :type :NOTIFY
                          :headers (-> msg :message :headers)})))
 

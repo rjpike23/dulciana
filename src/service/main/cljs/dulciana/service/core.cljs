@@ -6,7 +6,8 @@
 
 (ns dulciana.service.core
   (:require-macros [hiccups.core :as hiccups :refer [html5]])
-  (:require [cljs.nodejs :as nodejs]
+  (:require [cljs.core.async :as async]
+            [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
             [dulciana.service.net :as net]
             [dulciana.service.parser :as parser]
@@ -22,7 +23,7 @@
 (defonce *announcement-interval* 90000)
 
 (defonce http-server (atom nil))
-(defonce timer (atom nil))
+(defonce ssdp-announcement-timer (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -76,16 +77,64 @@
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
 
+(declare resubscribe)
+
+(defn handle-subscribe-response [msg device-id service-id]
+  (if (= (-> msg :message :status-code) 200)
+    (let [sid (-> msg :message :headers :sid)
+          delta-ts (js/parseInt (second (re-matches #"Second-(\d*)"
+                                                    (-> msg :message :headers :timeout))))]
+      (state/update-subscriptions state/subscriptions
+                                  {:sid sid
+                                   :expiration (js/Date. (+ (* 1000 delta-ts) (.getTime (js/Date.))))
+                                   :dev-id device-id
+                                   :svc-id service-id})
+      (async/go
+        (async/<! (async/timeout (* 1000 (- delta-ts 60)))) ; resub 60s before expiration.
+        (when (@state/subscriptions sid) ; make sure still subbed.
+          (resubscribe sid))))
+    (log/warn "Error (" (-> msg :message :status-code) ":" (-> msg :message :status-msg)
+              ") received from subscribe request, dev=" device-id "svc= " service-id)))
+
+(defn subscribe
+  ([device-id service-id]
+   (subscribe device-id service-id []))
+  ([device-id service-id state-var-list]
+   (let [svc (state/find-service device-id service-id)
+         ann (state/find-announcement device-id)]
+     (when (and svc ann)
+       (let [c (net/send-subscribe-message ann svc)]
+         (async/go
+           (let [msg (async/<! c)]
+             (handle-subscribe-response msg device-id service-id))))))))
+
+(defn resubscribe [sub-id]
+  (let [sub (@state/subscriptions sub-id)
+        svc (state/find-service (:dev-id sub) (:svc-id sub))
+        ann (state/find-announcement (:dev-id sub))]
+    (when (and svc ann)
+      (let [c (net/send-resubscribe-message sub ann svc)]
+        (async/go
+          (let [msg (async/<! c)]
+            (handle-subscribe-response msg (:dev-id sub) (:svc-id sub))))))))
+
+(defn unsubscribe [sub-id]
+  (let [sub (@state/subscriptions sub-id)]
+    (net/send-unsubscribe-message (:sid sub)
+                                  (state/find-announcement (:dev-id sub))
+                                  (state/find-service (:dev-id sub) (:svc-id sub)))
+    (state/remove-subscriptions state/subscriptions sub)))
+
 (defn notify []
   (log/trace "Sending announcements"))
 
 (defn start-notifications [interval]
-  (reset! timer (js/setInterval notify interval)))
+  (reset! ssdp-announcement-timer (js/setInterval notify interval)))
 
 (defn stop-notifications []
-  (when @timer
-    (js/clearInterval @timer))
-  (reset! timer nil))
+  (when @ssdp-announcement-timer
+    (js/clearInterval @ssdp-announcement-timer))
+  (reset! ssdp-announcement-timer nil))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.

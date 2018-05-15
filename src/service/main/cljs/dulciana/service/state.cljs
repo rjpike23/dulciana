@@ -69,6 +69,22 @@
 
 (defonce subscriptions (atom {}))
 
+(defn find-announcement [dev-id]
+  (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
+        @announcements))
+
+(defn find-device [dev-id]
+  (@remote-devices dev-id))
+
+(defn find-service [dev-id svc-id]
+  (let [dev (find-device dev-id)]
+    (when dev
+      (some #(when (= (:serviceId %) svc-id) %)
+            (-> dev :device :serviceList)))))
+
+(defn find-scpd [svc-usn]
+  (@remote-services svc-usn))
+
 (defn submit-dev-desc-request [dev-id]
   (swap-with-effects! remote-devices
                       (fn [devs] (if (@announcements dev-id)
@@ -90,13 +106,13 @@
                           (doseq [[dev-id _] (filter (fn [[k v]] (= v :new)) devs)]
                             (submit-dev-desc-request dev-id))))))
 
-(defn remove-expired-announcements [anns]
-  (into {} (filter (comp not (partial expired? (js/Date.))) anns)))
+(defn remove-expired-items [items]
+  (into {} (filter (comp not (partial expired? (js/Date.))) items)))
 
 (defn update-announcements [announcements-atom notification side-effector]
   (swap-with-effects! announcements-atom
                       (fn [anns]
-                        (assoc (remove-expired-announcements anns)
+                        (assoc (remove-expired-items anns)
                                (-> notification :message :headers :usn) notification))
                       side-effector))
 
@@ -105,12 +121,34 @@
   supplied notification."
   [announcements-atom notification side-effector]
   (let [id (get-dev-id (-> notification :message :headers :usn))]
-    (log/debug "Removing" id)
     (swap-with-effects! announcements-atom
                         (fn [anns]
                           (into {} (filter (fn [[k v]] (not (device-member? id k)))
-                                           (remove-expired-announcements anns))))
+                                           (remove-expired-items anns))))
                         side-effector)))
+
+(defn update-subscription-state [event]
+  (let [sid (-> event :message :headers :sid)]
+    (if (@subscriptions sid)
+      (do
+        ; TODO: dispatch event to service specific handler.
+        (when (:ok event)
+          ((:ok event))))
+      (do
+        (log/warn "Received event with unknown SID" sid)
+        (when (:error event)
+          ((:error event) 412 "Invalid SID"))))))
+
+(defn update-subscriptions [sub-atom sub]
+  (swap! sub-atom
+         (fn [subs]
+           (assoc (remove-expired-items subs) (:sid sub) sub))))
+
+(defn remove-subscriptions [sub-atom & subs]
+  (let [sid-set (set (map :sid subs))]
+    (swap! sub-atom (fn [subs-map]
+                      (into {} (filter #(not (contains? sid-set (first %)))
+                                       subs-map))))))
 
 (defonce sessions (atom {}))
 
@@ -132,10 +170,10 @@
       "ssdp:alive" (update-announcements announcements notification sync-devices)
       "ssdp:update" (update-announcements announcements notification sync-devices)
       "ssdp:byebye" (remove-announcements announcements notification sync-devices)
-      "upnp:propchange" (do (log/debug "Got an EVENT!" notification)
-                            ((:ok notification)))
+      "upnp:propchange" (update-subscription-state notification)
       (do (log/warn "Ignoring announcement type" notify-type)
-          ((:error notification) 412 "Invalid NTS header")))))
+          (when (:error notification)
+            ((:error notification) 412 "Invalid NTS header"))))))
 
 (defonce search-channel (atom nil))
 

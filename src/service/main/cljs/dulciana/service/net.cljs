@@ -54,18 +54,62 @@
   [iface]
   (send-ssdp-message iface (messages/emit-m-search-msg)))
 
+(defn handle-http-response [result-chan res]
+  (let [body-chan (async/chan)]
+    (events/slurp body-chan res)
+    (async/go
+      (async/>! result-chan {:message {:status-code (.-statusCode res)
+                                       :status-message (.-statusMessage res)
+                                       :body (async/<! body-chan)
+                                       :headers (js->clj (.-headers res) :keywordize-keys true)}}))))
 (defn send-http-request
   "Retuns a channel."
   [method host port path headers body]
+  (log/debug "sending http request" method host port path)
   (let [options {:hostname host
                  :port port
                  :path path
                  :method method
-                 :headers headers}
-        result-chan (async/chan)
-        req (.request http (clj->js options) (partial events/slurp result-chan))]
+                 :headers (clj->js headers)}
+        result-chan (async/chan 1)
+        req (.request http (clj->js options) (partial handle-http-response result-chan))]
     (.end req body)
     result-chan))
+
+(defn send-subscribe-message
+  "Returns a channel."
+  [announcement service]
+  (log/debug "Subscribe" announcement service)
+  (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
+                                       (:eventSubURL service)))
+        return-url (str "http://" (-> announcement :interface :address) ":" event-server-port "/events")]
+    (log/debug return-url)
+    (send-http-request "SUBSCRIBE" (.-hostname req-url) (.-port req-url) (str (.-pathname req-url) (.-search req-url))
+                       {:CALLBACK (str "<" return-url ">")
+                        :NT "upnp:event"
+                        :HOST (.-host req-url)
+                        :USER-AGENT "FreeBSD/11.1 UPnP/1.1 dulciana/0.0"}
+                       "")))
+
+(defn send-unsubscribe-message
+  "Returns a channel."
+  [sid announcement service]
+  (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
+                                       (:eventSubURL service)))]
+    (send-http-request "UNSUBSCRIBE" (.-hostname req-url) (.-port req-url) (str (.-pathname req-url) (.-search req-url))
+                       {:SID sid
+                        :HOST (str (.-host req-url))}
+                       "")))
+
+(defn send-resubscribe-message
+  "Returns a channel."
+  [subscription announcement service]
+  (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
+                                       (:eventSubURL service)))]
+    (send-http-request "SUBSCRIBE" (.-hostname req-url) (.-port req-url) (str (.-pathname req-url) (.-search req-url))
+                       {:SID (:sid subscription)
+                        :HOST (str (.-host req-url))}
+                       "")))
 
 ;;; Handler for SSDP pub-sub events
 (defn respond [response code message]
