@@ -12,35 +12,57 @@
 
 (defn listen
   ([src event] (listen src event (async/chan)))
-  ([src event channel] (.on src event (fn
-                                        ([] (async/put! channel []))
-                                        ([& args] (async/put! channel args))))
+  ([src event channel] (.on src (name event)
+                            (fn ([] (async/put! channel [src]))
+                              ([& args] (async/put! channel
+                                                    (apply vector src args)))))
    channel))
+
 
 (defn listen*
   "Registers event listeners for the events specificed in the events
   array on the supplied src. Returns a map of event names to channels.
   When the specified event occurs on the src object, the arguments of
-  the event are put on the corresponding channel."
+  the event are put on the corresponding channel. If the second argument
+  is a map, the keys are treated as names of events and the value is
+  an existing channel that will receive the event."
   ([src events]
-   (listen* src events async/chan))
-  ([src events chan-constructor]
-   (into {} (map #(vector %1 (listen src %1 (chan-constructor))) events))))
+   (if (sequential? events)
+     (into {} (map (fn [evt]
+                     [(keyword evt) (listen src evt)])
+                   events))
+     (do (doseq [[evt channel] events]
+           (listen src evt channel))
+         events))))
 
 (defn close* [channels]
   (doseq [c (vals channels)]
     (async/close! c)))
 
+(defn channel-driver [chan handler]
+  (go-loop []
+    (let [item (async/<! chan)]
+      (when item
+        (try
+          (handler item)
+          (catch :default e
+            (log/error e)))
+        (recur)))))
+
 (defn slurp [out-chan node-stream]
-  (let [channels (listen* node-stream ["data" "end" "error"])]
-    (async/take! (channels "end")
+  (let [channels (listen* node-stream [:data :end :error])]
+    (async/take! (:end channels)
                  #(close* channels))
-    (async/take! (channels "error")
-                 (fn [[err]]
+    (async/take! (:error channels)
+                 (fn [[this err]]
                    (close* channels)
                    (if err
                      (async/put! out-chan err))))
-    (async/pipe (async/reduce #(apply str %1 %2) "" (channels "data")) out-chan)))
+    (async/pipe (async/reduce (fn [arg1 [this arg2]]
+                                (apply str arg1 arg2))
+                              ""
+                              (:data channels))
+                out-chan)))
 
 (defn pump [c e n]
   (async/go-loop []

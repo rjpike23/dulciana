@@ -15,122 +15,21 @@
             [dulciana.service.parser :as parser]
             [dulciana.service.messages :as msg]
             [dulciana.service.state :as state]
-            [cljs.test :refer-macros [async deftest is testing run-tests]]
+            [dulciana.service.ssdp.core-tests :as ssdp-tests]
+            [dulciana.service.ssdp.messages-tests :as ssdp-msg-tests]
+            [cljs.test :refer-macros [async deftest is testing run-all-tests]]
             [events :as node-events]))
-
-(def *notify-msg*
-  (str/join "\r\n"
-            ["NOTIFY * HTTP/1.1"
-             "HOST: 239.255.255.250:1900"
-             "CACHE-CONTROL: max-age = 50000"
-             "LOCATION: http://example.com/desc.xml"
-             "NT: upnp:rootdevice"
-             "NTS: ssdp:alive"
-             "SERVER: OS/1.0 UPnP/2.0 product/1.0"
-             "USN: uuid:00000000-0000-0000-0000-000000000000\r\n\r\n"]))
-
-(def *search-msg*
-  (str/join "\r\n"
-            ["M-SEARCH * HTTP/1.1"
-             "HOST: 239.255.255.250:1900"
-             "MAN: \"ssdp:discover\""
-             "ST: sddp:all"
-             "USER-AGENT: OS/1.0 UPnP/2.0 product/1.0\r\n\r\n"]))
-
-(def *response-msg*
-  (str/join "\r\n"
-            ["HTTP/1.1 200 OK"
-             "CACHE-CONTROL: max-age = 50000"
-             "DATE: Fri, 26 Jan 2018 02:47:31 GMT"
-             "EXT: "
-             "LOCATION: http://example.com/desc.xml"
-             "SERVER: OS/1.0 UPnP/2.0 product/1.0"
-             "ST: ssdp:all"
-             "USN: uuid:00000000-0000-0000-0000-000000000000\r\n\r\n"]))
-
-(def *accept-malformed-msg*
-  (str/join "\r\n"
-            ["HTTP/1.1 200 OK"
-             "A-HEADER: value"]))
-
-(def *illegal-msg* "I am not a valid SSDP message")
-
-(def *expired-announcement*
-  {:remote
-   {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
-   :interface
-   {:address "127.0.0.1" :netmask "255.255.255.255" :family "IPv4" :mac "00:00:00:00:00:00" :internal true}
-   :message
-   {:type :NOTIFY
-    :headers
-    {:host "239.255.255.250:1900"
-     :cache-control "max-age=60"
-     :location "http://example.com/desc.xml"
-     :nts "ssdp:alive"
-     :server "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
-     :nt "uuid:abc::123"
-     :usn "uuid:abc::123"}
-    :body nil}
-   :expiration (js/Date. 0)})
-
-(def *valid-announcement*
-  {:remote
-   {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
-   :interface
-   {:address "127.0.0.1" :netmask "255.255.255.255" :family "IPv4" :mac "00:00:00:00:00:00" :internal true}
-   :message
-   {:type :NOTIFY
-    :headers
-    {:host "239.255.255.250:1900"
-     :cache-control "max-age=60"
-     :location "http://example.com/desc.xml"
-     :nts "ssdp:alive"
-     :server "POSIX, UPnP/1.0 UPnP Stack/6.37.14.62"
-     :nt "uuid:abd::124"
-     :usn "uuid:abd::124"}
-    :body nil}
-   :expiration (js/Date. 10000000000000)})
-
-(def *announcements*
-  {"uuid:abc::123" *expired-announcement*
-   "uuid:abd::124" *valid-announcement*})
-
-;; The format of the parser output is subject to change with the grammar, thus,
-;; there are no assertions on the content of the return value.
-(deftest test-parse
-  (is (not (nil? (parser/ssdp-parse {:message *notify-msg*}))))
-  (is (not (nil? (parser/ssdp-parse {:message *search-msg*}))))
-  (is (not (nil? (parser/ssdp-parse {:message *response-msg*}))))
-  (is (not (nil? (parser/ssdp-parse {:message *accept-malformed-msg*}))))
-  (try
-    (parser/ssdp-parse {:message *illegal-msg*})
-    (is nil "Expected error to be thrown.")
-    (catch :default e nil)))
-
-(deftest test-analyze
-  (let [notify-result (parser/ssdp-analyzer (parser/ssdp-parse {:message *notify-msg*
-                                                                :timestamp (js/Date. 0)}))]
-    (is (= :NOTIFY (-> notify-result :message :type)))
-    (is (= "239.255.255.250:1900" (-> notify-result :message :headers :host)))))
-
-(deftest remove-expired
-  (is (= {"uuid:abd::124" *valid-announcement*}
-         (state/remove-expired-items *announcements*))))
-
-(deftest remove-announcement
-  (is (= {}
-         (state/remove-announcements (atom *announcements*) *valid-announcement* (constantly nil))))
-  (is (= {"uuid:abd::124" *valid-announcement*}
-         (state/remove-announcements (atom *announcements*) *expired-announcement* (constantly nil)))))
 
 (deftest event-listen
   (let [event-emitter (node-events/EventEmitter.)
         chans (event/listen* event-emitter ["foo" "bar"])]
     (async done
      (is event-emitter)
-     (is (and (chans "foo") (chans "bar")))
+     (is (and (:foo chans) (:bar chans)))
      (go
-       (is (= [1 2 3] (async/<! (chans "foo"))))
+       (let [m (async/<! (:foo chans))]
+         (is (= event-emitter (first m)))
+         (is (= '(1 2 3) (rest m))))
        (done))
      (.emit event-emitter "foo" 1 2 3)
      (doseq [c (vals chans)] (async/close! c)))))
@@ -161,4 +60,5 @@
              (is (nil? (async/<! out)))
              (done)))))
 
-(run-tests)
+
+(run-all-tests #"dulciana.*tests")

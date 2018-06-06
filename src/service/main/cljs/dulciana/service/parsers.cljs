@@ -14,69 +14,6 @@
             [tubax.helpers :as xml-util]
             [taoensso.timbre :as log :include-macros true]))
 
-(defparser ssdp-parser
-  (str/join "\n"
-            '("SSDP_MSG = START_LINE HEADERS (<CRLF>+ BODY)?"
-              "CRLF = '\\r\\n'"
-              "SP = ' '"
-              "REQUEST_URI = #'[^ ]*'" ; Be forgiving as possible in parsing
-              "START_LINE = NOTIFY | SEARCH | SUBSCRIBE | UNSUBSCRIBE | RESPONSE"
-              "NOTIFY = 'NOTIFY' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
-              "SEARCH = 'M-SEARCH' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
-              "SUBSCRIBE = 'SUBSCRIBE' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
-              "UNSUBSCRIBE = 'UNSUBSCRIBE' <SP> REQUEST_URI <SP> 'HTTP/1.1'"
-              "RESPONSE = 'HTTP/1.1 200 OK'"
-              "HEADERS = (HEADER *)"
-              "SEPARATOR = ':' #'[ \t]*'"
-              "HEADER = (<CRLF> NAME <SEPARATOR> VALUE)"
-              "NAME = #'[\\w\\-_\\.]+'"
-              "VALUE = #'[^\\r]*'"
-              "BODY = #'.*'")))
-
-(defn ssdp-parse
-  "Parses an incoming SSDP message into a simple AST as defined by the grammar above.
-  Returns the original object with the :message key replaced with the AST."
-  [channel-msg]
-  (let [parse-result (ssdp-parser (:message channel-msg))]
-    (when (parser/failure? parse-result)
-      (log/debug "Error parsing" (:message channel-msg))
-      (throw parse-result))
-    (log/spy :trace "SSDP parser out"
-             (assoc channel-msg :message parse-result))))
-
-(defn error-handler
-  "Logs the supplied error."
-  [ex]
-  (log/error "Exception parsing msg:\n" ex))
-
-(defn header-map
-  "Converts an AST of SSDP headers into a key value map."
-  [hdrs-ast]
-  (into {} (map #(let [[HEADER [NAME name] [VALUE value]] %]
-                   [(keyword (str/lower-case name)) value])
-                hdrs-ast)))
-
-(defn set-expiration [ann]
-  (let [timestamp (:timestamp ann)
-        cache-header (-> ann :message :headers :cache-control)]
-    (if cache-header
-      (let [age-millis (* 1000 (js/parseInt
-                                (second (first (re-seq #"max-age[ ]*=[ ]*([1234567890]*)"
-                                                       cache-header)))))]
-        (assoc ann :expiration (js/Date. (+ age-millis (.getTime timestamp)))))
-      ann)))
-
-(defn ssdp-analyzer
-  "Analyzes the AST from the parser, extracting values and converting to a map.
-  Returns the supplied object, with the :message key replaced with the new data structure."
-  [parse-result]
-  (let [[SSDP_MSG [START_LINE [type]] [HEADERS & headers] body] (:message parse-result)]
-    (log/spy :trace "SSDP anlzr out"
-             (set-expiration
-              (assoc parse-result :message {:type type
-                                            :headers (header-map headers)
-                                            :body body})))))
-
 (defonce ssdp-message-channel (atom nil))
 (defonce ssdp-event-channel (atom nil))
 (defonce ssdp-publisher (atom nil))
@@ -268,7 +205,7 @@
                       error-handler))
   (reset! ssdp-publisher
           (async/pub (async/merge [@ssdp-message-channel @ssdp-event-channel])
-                     (comp :type :message)))
+                     :type))
   (reset! descriptor-channel
           (async/chan 1
                       (comp (map descriptor-parse) (map analyze-descriptor))

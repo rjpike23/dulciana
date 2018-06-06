@@ -19,17 +19,7 @@
             [net :as net]
             [url :as url]))
 
-;;; Define SSDP protocol networking constants:
-(def ssdp-mcast-addresses {"IPv4" "239.255.255.250"
-                           "IPv6" "ff0e::c"})
-(def ssdp-protocols {"IPv4" "udp4"
-                     "IPv6" "udp6"})
-(def ssdp-port 1900)
 (def event-server-port 3200)
-
-;;; Networking module state vars:
-;;; Map of open sockets:
-(defonce sockets (atom {}))
 
 ;;; HTTP server socket for eventing:
 (defonce event-server (atom {}))
@@ -40,19 +30,25 @@
   (filter #(not (% :internal))
           (flatten (vals (js->clj (os/networkInterfaces) :keywordize-keys true)))))
 
-;;; Multicast message sender:
-(defn send-ssdp-message
-  "Sends a multicast message from the supplied interface. A socket for the interface should have previously
-  been opened with net/start-listener. See nodejs dgram.send()."
-  [iface message]
-  (log/trace "Sending SSDP message" message)
-  (when-let [socket (@sockets (iface :address))]
-    (.send socket message ssdp-port (ssdp-mcast-addresses (iface :family)))))
+(defn create-udp-socket [prot-family]
+  (let [socket (dgram/createSocket prot-family)
+        channels (events/listen* socket [:listening :error :message :close])]
+    {:socket socket
+     :channels channels}))
 
-(defn send-ssdp-search-message
-  "Sends a M-SEARCH SSDP Discovery message on all enabled interfaces."
-  [iface]
-  (send-ssdp-message iface (messages/emit-m-search-msg)))
+(defn bind-udp-socket [socket port addr]
+  (if (= "Windows_NT" (os/type))
+    (.bind (:socket socket) port addr)
+    (.bind (:socket socket) port))
+  socket)
+
+(defn add-membership [socket group-addr local-addr]
+  (.addMembership (:socket socket) group-addr local-addr)
+  socket)
+
+(defn close-udp-socket [socket]
+  (.close (:socket socket))
+  socket)
 
 (defn handle-http-response [result-chan res]
   (let [body-chan (async/chan)]
@@ -136,42 +132,6 @@
       (.writeHead response 405 "Method Not Allowed" (clj->js {"Allow" "NOTIFY"}))
       (.end response "Method not allowed."))))
 
-;;; Datagram event handlers follow:
-(defn handle-ssdp-error
-  "Callback for socket errors returned from NodeJS datagram API."
-  [iface socket exception]
-  (log/error exception "Socket error!")
-  (.close socket))
-
-(defn handle-ssdp-message [iface socket msg remote-js]
-  "Callback for messages received on the SSDP multicast socket.
-  pushes messages onto the ssdp-message-channel, with metadata."
-  (let [remote (js->clj remote-js :keywordize-keys true)]
-    (log/trace "Dgram rcvd" (:address remote) (.toString msg))
-    (go (async/>! @parser/ssdp-message-channel {:remote remote
-                                          :interface iface
-                                          :timestamp (js/Date.)
-                                          :message (.toString msg)}))))
-
-(defn handle-ssdp-socket-close
-  "Callback for socket close events generated from NodeJS datagram API."
-  [iface socket]
-  (log/debug "Socket closed" (:address iface))
-  (swap! sockets dissoc (:address iface)))
-
-(defn handle-ssdp-socket-listening
-  "Callback for socket listening events generated from NodeJS datagram API.
-  This implementation adds the socket to the SSDP multicast group, and
-  updates the sockets var to include the new socket."
-  [iface socket]
-  (log/debug "Socket listening, adding iface to multicast group" (:address iface))
-  (.addMembership socket
-                  (ssdp-mcast-addresses (:family iface))
-                  (:address iface))
-  (swap! sockets assoc (:address iface) socket)
-  (log/info "Listening for SSDP messages on" (:address iface))
-  (send-ssdp-search-message iface))
-
 (defn handle-descriptor-response
   "Result handler for both device and service descriptor responses. Pumps
   a result object into the supplied channel."
@@ -240,24 +200,3 @@
   []
   (.close @event-server))
 
-;;; Following functions are used to init/teardown the SSDP multicast listeners.
-(defn start-listener
-  "Creates a new multicast socket on the supplied interface. "
-  [iface]
-  (let [socket (dgram/createSocket (ssdp-protocols (:family iface)))]
-    (.on socket "error" (partial handle-ssdp-error iface socket))
-    (.on socket "message" (partial handle-ssdp-message iface socket))
-    (.on socket "close" (partial handle-ssdp-socket-close iface socket))
-    (.on socket "listening" (partial handle-ssdp-socket-listening iface socket))
-    (if (= "Windows_NT" (os/type))
-      (.bind socket ssdp-port (:address iface)) ; Windows
-      (.bind socket ssdp-port)) ; UNIX/Linux
-    socket))
-
-(defn start-listeners []
-  (doseq [iface (get-ifaces)]
-    (start-listener iface)))
-
-(defn stop-listeners [sockets]
-  (doseq [[k socket] sockets]
-    (.close socket)))
