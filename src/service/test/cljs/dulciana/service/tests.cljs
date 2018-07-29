@@ -1,4 +1,4 @@
-;  Copyright 2017, Radcliffe J. Pike. All rights reserved.
+;  Copyright 2017-2018, Radcliffe J. Pike. All rights reserved.
 ;
 ;  This Source Code Form is subject to the terms of the Mozilla Public
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -12,9 +12,6 @@
             [dulciana.service.spec :as dulc-spec]
             [dulciana.service.core :as core]
             [dulciana.service.events :as event]
-            [dulciana.service.parser :as parser]
-            [dulciana.service.messages :as msg]
-            [dulciana.service.state :as state]
             [dulciana.service.ssdp.core-tests :as ssdp-tests]
             [dulciana.service.ssdp.messages-tests :as ssdp-msg-tests]
             [cljs.test :refer-macros [async deftest is testing run-all-tests]]
@@ -60,5 +57,18 @@
              (is (nil? (async/<! out)))
              (done)))))
 
+(deftest wrap-atom
+  (let [a (atom {})
+        w (event/wrap-atom a)
+        c (async/chan)]
+    (async/sub w :update c)
+    (async done
+           (reset! a {:test 1})
+           (go
+             (let [changes (async/<! c)]
+               (is (not (nil? changes)))
+               (is (= {:test 1} (:add changes)))
+               (event/unwrap-atom a)
+               (done))))))
 
 (run-all-tests #"dulciana.*tests")

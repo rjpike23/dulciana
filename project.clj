@@ -10,16 +10,16 @@
   :license {:name "Mozilla Public License, v 2.0"
             :url "http://mozilla.org/MPL/2.0/"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/clojurescript "1.10.238"]
+                 [org.clojure/clojurescript "1.10.339"]
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/test.check "0.9.0"]
                  [org.clojure/data.xml "0.2.0-alpha5"]
                  [binaryage/devtools "0.9.9"]
                  [lein-cljsbuild "1.1.7"]
-                 [com.cemerick/piggieback "0.2.1"]
+                 [cider/piggieback "0.3.6"]
                  [com.cemerick/url "0.1.1"]
-                 [lein-figwheel "0.5.14"]
-                 [figwheel-sidecar "0.5.14"]
+                 [lein-figwheel "0.5.16"]
+                 [figwheel-sidecar "0.5.16"]
                  [instaparse "1.4.8"]
                  [reagent "0.8.0-alpha2"]
                  [re-frame "0.10.3"]
@@ -29,8 +29,8 @@
                  [funcool/tubax "0.2.0"]
                  [com.taoensso/timbre "4.10.0"]]
   :plugins [[lein-cljsbuild "1.1.7"]
-            [org.clojure/clojurescript "1.9.946"]
-            [lein-figwheel "0.5.14"]]
+            [org.clojure/clojurescript "1.10.339"]
+            [lein-figwheel "0.5.16"]]
   :clean-targets ^{:protect false} ["target"]
   :cljsbuild {
               :builds [{:id "fig-service"
@@ -62,4 +62,4 @@
                                    :npm-deps {:react "15.6.0"
                                               :react-dom "15.6.0"}}}]}
   :figwheel {}
-  :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]})
+  :repl-options {:nrepl-middleware [cider.piggieback/wrap-cljs-repl]})

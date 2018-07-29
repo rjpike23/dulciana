@@ -10,15 +10,14 @@
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
             [dulciana.service.net :as net]
-            [dulciana.service.parser :as parser]
-            [dulciana.service.state :as state]
-            [dulciana.service.messages :as msg]
             [dulciana.service.ssdp.core :as ssdp]
+            [dulciana.service.upnp.core :as upnp]
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
             [source-map-support :as sms]))
 
+(sms/install)
 (nodejs/enable-util-print!)
 
 (defonce *announcement-interval* 90000)
@@ -61,15 +60,15 @@
 (. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @state/remote-devices)))))))
+              (. res (send (pr-str (filter-pending @upnp/*remote-devices*)))))))
 (. app (get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @state/remote-services)))))))
+              (. res (send (pr-str (filter-pending @upnp/*remote-services*)))))))
 (. app (get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (@state/remote-services (.-svcid (.-params req)))))))))
+              (. res (send (pr-str (@upnp/*remote-services* (.-svcid (.-params req)))))))))
 (. app (get "/upnp/devices/"
             template-express-handler))
 (. app (get "/upnp/device/:devid"
@@ -78,54 +77,6 @@
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
 
-(declare resubscribe)
-
-#_(defn handle-subscribe-response [msg device-id service-id]
-  (if (= (-> msg :message :status-code) 200)
-    (let [sid (-> msg :message :headers :sid)
-          delta-ts (js/parseInt (second (re-matches #"Second-(\d*)"
-                                                    (-> msg :message :headers :timeout))))]
-      (state/update-subscriptions state/subscriptions
-                                  {:sid sid
-                                   :expiration (js/Date. (+ (* 1000 delta-ts) (.getTime (js/Date.))))
-                                   :dev-id device-id
-                                   :svc-id service-id})
-      (async/go
-        (async/<! (async/timeout (* 1000 (- delta-ts 60)))) ; resub 60s before expiration.
-        (when (@state/subscriptions sid) ; make sure still subbed.
-          (resubscribe sid))))
-    (log/warn "Error (" (-> msg :message :status-code) ":" (-> msg :message :status-msg)
-              ") received from subscribe request, dev=" device-id "svc= " service-id)))
-
-#_(defn subscribe
-  ([device-id service-id]
-   (subscribe device-id service-id []))
-  ([device-id service-id state-var-list]
-   (let [svc (state/find-service device-id service-id)
-         ann (state/find-announcement device-id)]
-     (when (and svc ann)
-       (let [c (net/send-subscribe-message ann svc)]
-         (async/go
-           (let [msg (async/<! c)]
-             (handle-subscribe-response msg device-id service-id))))))))
-
-#_(defn resubscribe [sub-id]
-  (let [sub (@state/subscriptions sub-id)
-        svc (state/find-service (:dev-id sub) (:svc-id sub))
-        ann (state/find-announcement (:dev-id sub))]
-    (when (and svc ann)
-      (let [c (net/send-resubscribe-message sub ann svc)]
-        (async/go
-          (let [msg (async/<! c)]
-            (handle-subscribe-response msg (:dev-id sub) (:svc-id sub))))))))
-
-
-#_(defn unsubscribe [sub-id]
-  (let [sub (@state/subscriptions sub-id)]
-    (net/send-unsubscribe-message (:sid sub)
-                                  (state/find-announcement (:dev-id sub))
-                                  (state/find-service (:dev-id sub) (:svc-id sub)))
-    (state/remove-subscriptions state/subscriptions sub)))
 
 (defn notify []
   (log/trace "Sending announcements"))
@@ -142,10 +93,9 @@
 ;;; -main and the figwheel reload hook.
 (defn setup []
   (try
-    ;(parser/start-ssdp-parser)
-    ;(state/start-subscribers)
-    ;(net/start-listeners)
     (start-notifications *announcement-interval*)
+    (ssdp/start-listeners)
+    (upnp/start-listeners)
     (reset! http-server
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
@@ -154,9 +104,8 @@
 
 (defn teardown []
   (stop-notifications)
-  ;(ssdp/stop-listeners @net/sockets)
-  ;(state/stop-subscribers)
-  ;(parser/stop-ssdp-parser)
+  (upnp/stop-listeners)
+  (ssdp/stop-listeners @ssdp/*sockets*)
   (.close @http-server))
 
 (defn fig-reload-hook []

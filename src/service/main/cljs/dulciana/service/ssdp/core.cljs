@@ -31,6 +31,15 @@
 
 (defonce *announcements* (atom {}))
 
+(defonce *announcements-pub* (events/wrap-atom *announcements*))
+
+(defn create-usn
+  "Constructs a USN from the device id and service id."
+  [dev-id svc-id]
+  (if svc-id
+    (str dev-id "::" svc-id)
+    dev-id))
+
 (defn get-dev-id
   "Utility function to extract the device id from a USN value."
   [usn]
@@ -43,6 +52,18 @@
 
 (defn expired? [now [key ann]]
   (< (:expiration ann) now))
+
+(defn get-announced-device-ids [announcement-map]
+  (set (map (fn [[k v]] (get-dev-id k)) announcement-map)))
+
+(defn get-announced-services-for-device [dev-id announcement-map]
+  (set (map (fn [[k v]] k)
+            (filter (fn [[k v]] (str/starts-with? k dev-id))
+                    announcement-map))))
+
+(defn find-announcement [dev-id]
+  (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
+        @*announcements*))
 
 (defn device-member?
   "Utility function to determine if a service with the supplied
@@ -143,3 +164,4 @@
 (defn stop-listeners [sockets]
   (doseq [[k socket] sockets]
     (.close socket)))
+

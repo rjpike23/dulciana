@@ -7,6 +7,7 @@
 (ns dulciana.service.events
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.core.async :as async]
+            [clojure.set :as set]
             [taoensso.timbre :as log :include-macros true]
             [events :as node-events]))
 
@@ -17,7 +18,6 @@
                               ([& args] (async/put! channel
                                                     (apply vector src args)))))
    channel))
-
 
 (defn listen*
   "Registers event listeners for the events specificed in the events
@@ -46,7 +46,7 @@
         (try
           (handler item)
           (catch :default e
-            (log/error e)))
+            (log/error e "failed on: " item)))
         (recur)))))
 
 (defn slurp [out-chan node-stream]
@@ -59,7 +59,7 @@
                    (if err
                      (async/put! out-chan err))))
     (async/pipe (async/reduce (fn [arg1 [this arg2]]
-                                (apply str arg1 arg2))
+                                (apply str arg1 (.toString arg2)))
                               ""
                               (:data channels))
                 out-chan)))
@@ -78,4 +78,20 @@
    (doseq [[k v] channels]
      (pump v e k))))
 
+(defn wrap-atom [atom]
+  (let [c (async/chan)
+        pub (async/pub c (constantly :update))]
+    (add-watch atom :db-watcher
+               (fn [key atom old new]
+                 (let [old-ks (set (keys old))
+                       new-ks (set (keys new))
+                       adds (select-keys new (set/difference new-ks old-ks))
+                       dels (set/difference old-ks new-ks)
+                       upds (select-keys new (set/intersection new-ks old-ks))]
+                   (async/put! c {:add adds
+                                  :delete dels
+                                  :update upds}))))
+    pub))
 
+(defn unwrap-atom [atom]
+  (remove-watch atom :db-watcher))
