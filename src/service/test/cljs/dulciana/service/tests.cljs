@@ -12,8 +12,8 @@
             [dulciana.service.spec :as dulc-spec]
             [dulciana.service.core :as core]
             [dulciana.service.events :as event]
-            [dulciana.service.ssdp.core-tests :as ssdp-tests]
-            [dulciana.service.ssdp.messages-tests :as ssdp-msg-tests]
+            [dulciana.service.upnp.discovery.core-tests :as discovery-tests]
+            [dulciana.service.upnp.discovery.messages-tests :as discovery-msg-tests]
             [cljs.test :refer-macros [async deftest is testing run-all-tests]]
             [events :as node-events]))
 

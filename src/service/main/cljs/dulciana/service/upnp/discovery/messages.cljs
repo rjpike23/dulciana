@@ -4,7 +4,7 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns dulciana.service.ssdp.messages
+(ns dulciana.service.upnp.discovery.messages
   (:require [clojure.string :as str]
             [instaparse.core :as parser :refer-macros [defparser]]
             [taoensso.timbre :as log :include-macros true]))

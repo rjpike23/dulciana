@@ -4,12 +4,12 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns ^:figwheel-always dulciana.service.ssdp.messages-tests
+(ns ^:figwheel-always dulciana.service.upnp.discovery.messages-tests
   (:require [cljs.core.async :as async]
             [clojure.string :as str]
             [cljs.test :refer-macros [async deftest is testing run-tests]]
             [taoensso.timbre :as log :include-macros true]
-            [dulciana.service.ssdp.messages :as messages]))
+            [dulciana.service.upnp.discovery.messages :as messages]))
 
 (def *notify-msg*
   (str/join "\r\n"

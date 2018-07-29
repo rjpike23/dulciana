@@ -4,7 +4,7 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns dulciana.service.ssdp.core
+(ns dulciana.service.upnp.discovery.core
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.core.async :as async]
             [clojure.string :as str]
@@ -12,7 +12,7 @@
             [os :as os]
             [dgram :as dgram]
             [dulciana.service.events :as events]
-            [dulciana.service.ssdp.messages :as messages]
+            [dulciana.service.upnp.discovery.messages :as messages]
             [dulciana.service.parser :as parser]
             [dulciana.service.net :as net]))
 

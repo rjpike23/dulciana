@@ -4,13 +4,13 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns ^:figwheel-always dulciana.service.ssdp.core-tests
+(ns ^:figwheel-always dulciana.service.upnp.discovery.core-tests
   (:require [cljs.core.async :as async]
             [cljs.test :refer-macros [async deftest is testing run-tests]]
             [taoensso.timbre :as log :include-macros true]
             [events :as node-events]
             [dgram :as node-dgram]
-            [dulciana.service.ssdp.core :as ssdp]))
+            [dulciana.service.upnp.discovery.core :as discovery]))
 
 (def *expired-announcement*
   {:remote
@@ -62,20 +62,20 @@
 
 (deftest remove-expired
   (is (= {"uuid:abd::124" *valid-announcement*}
-         (ssdp/remove-expired-items *announcements*))))
+         (discovery/remove-expired-items *announcements*))))
 
 (deftest remove-announcement
   (is (= {}
-         (ssdp/remove-announcements (atom *announcements*) *valid-announcement*)))
+         (discovery/remove-announcements (atom *announcements*) *valid-announcement*)))
   (is (= {"uuid:abd::124" *valid-announcement*}
-         (ssdp/remove-announcements (atom *announcements*) *expired-announcement*))))
+         (discovery/remove-announcements (atom *announcements*) *expired-announcement*))))
 
 (deftest start-listener-test
   (let [iface {:family "IPv4" :address "1.2.3.4"}
         calls (atom #{})
         bind-fn (fn [& args]
                   (swap! calls conj :bind)
-                  (is (= ssdp/*ssdp-port* (first args)))
+                  (is (= discovery/*ssdp-port* (first args)))
                   (is (or (= 1 (count args)) (= (:address iface) (second args))))
                   nil)
         add-m-fun (fn [& args]
@@ -88,7 +88,7 @@
                     (swap! calls conj :close))
         sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
-      (let [result (ssdp/start-listener iface)]
+      (let [result (discovery/start-listener iface)]
         (.emit sock-mock "listening")
         (.emit sock-mock "message" "hello")
         (.emit sock-mock "close")
@@ -121,7 +121,7 @@
                       (.emit this "close")))
         sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
-      (let [result (ssdp/start-listener iface)]
+      (let [result (discovery/start-listener iface)]
         (.emit sock-mock "error" (js/Error. "Testing"))
         (async done
                (async/go

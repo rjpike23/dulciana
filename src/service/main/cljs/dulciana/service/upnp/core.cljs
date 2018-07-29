@@ -12,9 +12,9 @@
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.upnp.messages :as msg]
-            [dulciana.service.ssdp.core :as ssdp]))
+            [dulciana.service.upnp.discovery.core :as discovery]))
 
-(defonce *ssdp-sub* (atom nil))
+(defonce *announcements-sub* (atom nil))
 
 (defonce *remote-devices* (atom {}))
 
@@ -75,10 +75,10 @@
 
 (defn submit-dev-desc-request [dev-id]
   (swap! *remote-devices*
-         (fn [devs] (if (@ssdp/*announcements* dev-id)
+         (fn [devs] (if (@discovery/*announcements* dev-id)
                       (assoc devs dev-id :pending)
                       (dissoc devs dev-id)))
-         (fn [devs] (when-let [announcement (@ssdp/*announcements* dev-id)]
+         (fn [devs] (when-let [announcement (@discovery/*announcements* dev-id)]
                       (request-device-descriptor announcement)))))
 
 (defn process-remote-services-updates [updates]
@@ -86,8 +86,8 @@
     (when (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
-          (when-let [ann (ssdp/find-announcement (ssdp/get-dev-id k))]
-            (when-let [svc (find-service (ssdp/get-dev-id k) (ssdp/get-svc-id k))]
+          (when-let [ann (discovery/find-announcement (discovery/get-dev-id k))]
+            (when-let [svc (find-service (discovery/get-dev-id k) (discovery/get-svc-id k))]
               (let [c (request-service-descriptor ann svc)
                     result (async/<! c)]
                 (swap! *remote-services* assoc k (:message result))))))))))
@@ -97,22 +97,22 @@
      (if (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
-          (when-let [ann (ssdp/find-announcement k)]
+          (when-let [ann (discovery/find-announcement k)]
             (let [c (request-device-descriptor ann)
                   result (async/<! c)]
               (swap! *remote-devices* assoc k (:message result))))))
       (swap! *remote-services*
              (fn [svcs]
-               (merge (into {} (map (fn [s] [(ssdp/create-usn k (:serviceId s)) (atom :new)])
+               (merge (into {} (map (fn [s] [(discovery/create-usn k (:serviceId s)) (atom :new)])
                                     (-> v :device :serviceList)))
                       svcs))))))
 
-(defn process-ssdp-updates [ssdp-updates]
+(defn process-discovery-updates [discovery-updates]
   (swap! *remote-devices*
          (fn [devs]
-            (let [deletes (set (map ssdp/get-dev-id (:delete ssdp-updates)))
+            (let [deletes (set (map discovery/get-dev-id (:delete discovery-updates)))
                  devs-dels (apply dissoc devs deletes)
-                 adds (set/difference (set (map ssdp/get-dev-id (keys (:add ssdp-updates))))
+                 adds (set/difference (set (map discovery/get-dev-id (keys (:add discovery-updates))))
                                       (set (keys @*remote-devices*)))]
               (into devs-dels (map (fn [k] [k (atom :new)]) adds))))))
 
@@ -120,7 +120,7 @@
   (if (:error dev-desc)
     (do
       (log/error "Error retrieving dev desc:" dev-desc)
-      (ssdp/remove-announcements ssdp/*announcements* (:announcement dev-desc)))
+      (discovery/remove-announcements discovery/*announcements* (:announcement dev-desc)))
     (do
       (log/debug "Got dev desc:" (-> dev-desc :message :device :UDN))
       (swap! *remote-devices*
@@ -137,8 +137,8 @@
       (log/debug "Got svc desc" (-> svc-desc :service-info :serviceId))
       (swap! *remote-services*
              (fn [svcs]
-               (assoc svcs (ssdp/create-usn
-                            (ssdp/get-dev-id (-> svc-desc :announcement :message :headers :usn))
+               (assoc svcs (discovery/create-usn
+                            (discovery/get-dev-id (-> svc-desc :announcement :message :headers :usn))
                             (-> svc-desc :service-info :serviceId))
                       (svc-desc :message)))))))
 
@@ -157,7 +157,7 @@
 (defn update-subscriptions [sub-atom sub]
   (swap! sub-atom
          (fn [subs]
-           (assoc (ssdp/remove-expired-items subs) (:sid sub) sub))))
+           (assoc (discovery/remove-expired-items subs) (:sid sub) sub))))
 
 (defn remove-subscriptions [sub-atom & subs]
   (let [sid-set (set (map :sid subs))]
@@ -188,7 +188,7 @@
    (subscribe device-id service-id []))
   ([device-id service-id state-var-list]
    (let [svc (find-service device-id service-id)
-         ann (ssdp/find-announcement device-id)]
+         ann (discovery/find-announcement device-id)]
      (when (and svc ann)
        (let [c (net/send-subscribe-message ann svc)]
          (async/go
@@ -198,7 +198,7 @@
 (defn resubscribe [sub-id]
   (let [sub (@*subscriptions* sub-id)
         svc (find-service (:dev-id sub) (:svc-id sub))
-        ann (ssdp/find-announcement (:dev-id sub))]
+        ann (discovery/find-announcement (:dev-id sub))]
     (when (and svc ann)
       (let [c (net/send-resubscribe-message sub ann svc)]
         (async/go
@@ -209,26 +209,25 @@
 (defn unsubscribe [sub-id]
   (let [sub (@*subscriptions* sub-id)]
     (net/send-unsubscribe-message (:sid sub)
-                                  (ssdp/find-announcement (:dev-id sub))
+                                  (discovery/find-announcement (:dev-id sub))
                                   (find-service (:dev-id sub) (:svc-id sub)))
     (remove-subscriptions *subscriptions* sub)))
 
 (defn start-listeners []
-  (let [ssdp-chan (async/chan)
-        rd-chan (async/chan)
-        rs-chan (async/chan)]
-    (reset! *ssdp-sub* ssdp-chan)
-    (reset! *remote-devices-sub* rd-chan)
-    (reset! *remote-services-sub* rs-chan)
-    (async/sub ssdp/*announcements-pub* :update ssdp-chan)
-    (events/channel-driver ssdp-chan process-ssdp-updates)
-    (async/sub *remote-devices-pub* :update rd-chan)
-    (events/channel-driver rd-chan process-remote-devices-updates)
-    (async/sub *remote-services-pub* :update rs-chan)
-    (events/channel-driver rs-chan process-remote-services-updates)))
+  (reset! *announcements-sub* (async/chan))
+  (reset! *remote-devices-sub* (async/chan))
+  (reset! *remote-services-sub* (async/chan))
+  (async/sub discovery/*announcements-pub* :update @*announcements-sub*)
+  (events/channel-driver @*announcements-sub* process-discovery-updates)
+  (async/sub *remote-devices-pub* :update @*remote-devices-sub*)
+  (events/channel-driver @*remote-devices-sub* process-remote-devices-updates)
+  (async/sub *remote-services-pub* :update @*remote-services-sub*)
+  (events/channel-driver @*remote-services-sub* process-remote-services-updates))
 
 (defn stop-listeners []
   (async/unsub *remote-services-pub* :update @*remote-services-sub*)
+  (async/close! @*remote-services-sub*)
   (async/unsub *remote-devices-pub* :update @*remote-devices-sub*)
-  (async/unsub ssdp/*announcements-pub* :update @*ssdp-sub*)
-  (async/close! @*ssdp-sub*))
+  (async/close! @*remote-devices-sub*)
+  (async/unsub discovery/*announcements-pub* :update @*announcements-sub*)
+  (async/close! @*announcements-sub*))

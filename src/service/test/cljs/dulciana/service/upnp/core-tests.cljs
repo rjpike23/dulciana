@@ -9,5 +9,4 @@
             [cljs.test :refer-macros [async deftest is testing run-tests]]
             [taoensso.timbre :as log :include-macros true]
             [events :as node-events]
-            [dgram :as node-dgram]
-            [dulciana.service.ssdp.core :as ssdp]))
+            [dgram :as node-dgram]))

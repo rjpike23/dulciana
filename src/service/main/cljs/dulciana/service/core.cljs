@@ -10,8 +10,8 @@
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
             [dulciana.service.net :as net]
-            [dulciana.service.ssdp.core :as ssdp]
             [dulciana.service.upnp.core :as upnp]
+            [dulciana.service.upnp.discovery.core :as discovery]
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
@@ -56,7 +56,7 @@
 (. app (get "/api/upnp/announcements"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @ssdp/*announcements*))))))
+              (. res (send (pr-str @discovery/*announcements*))))))
 (. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
@@ -94,7 +94,7 @@
 (defn setup []
   (try
     (start-notifications *announcement-interval*)
-    (ssdp/start-listeners)
+    (discovery/start-listeners)
     (upnp/start-listeners)
     (reset! http-server
             (doto (.createServer http #(app %1 %2))
@@ -105,7 +105,7 @@
 (defn teardown []
   (stop-notifications)
   (upnp/stop-listeners)
-  (ssdp/stop-listeners @ssdp/*sockets*)
+  (discovery/stop-listeners @discovery/*sockets*)
   (.close @http-server))
 
 (defn fig-reload-hook []
