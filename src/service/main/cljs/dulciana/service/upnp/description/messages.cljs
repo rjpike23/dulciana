@@ -1,39 +1,14 @@
-;  Copyright 2017-2018, Radcliffe J. Pike. All rights reserved.
+;  Copyright 2017, Radcliffe J. Pike. All rights reserved.
 ;
 ;  This Source Code Form is subject to the terms of the Mozilla Public
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns dulciana.service.upnp.messages
+(ns dulciana.service.upnp.description.messages
   (:require [dulciana.service.xml :as dul-xml]
             [taoensso.timbre :as log :include-macros true]
             [tubax.core :as xml]
             [tubax.helpers :as xml-util]))
-
-(defn emit-prop-val-xml [[n v]]
-  (str "<" (name n) ">" v "</" (name n) ">"))
-
-(defn emit-control-soap-msg [service-type action-name params]
-  (str "<?xml version=\"1.0\"?>\r\n"
-       "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-       "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
-       "<s:Body>"
-       "<u:" action-name " xmlns:u=\"" service-type "\">"
-       (apply str (map emit-prop-val-xml params))
-       "</u:" action-name ">"
-       "</s:Body>"
-       "</s:Envelope>"))
-
-(defn emit-event-prop-xml [[name value]]
-  (str "<s:property>"
-       (emit-prop-val-xml [name value])
-       "</s:property>"))
-
-(defn emit-event-msg [prop-values]
-  (str "<?xml version=\"1.0\"?>\r\n"
-       "<s:propertyset xmlns:s=\"urn:schemas-upnp-org:event-1-0\">"
-       (apply str (map emit-event-prop-xml prop-values))
-       "</s:propertyset>"))
 
 (defn descriptor-parse
   "Analyzes the response received on the descriptor-channel and performs an
@@ -43,10 +18,9 @@
   be taken on the application state."
   [channel-msg]
   (try
-    (log/spy :trace "Desc parser out"
-             (if (:error channel-msg)
-               channel-msg ; push the original message with error state through the pipe...
-               (assoc channel-msg :message (xml/xml->clj (-> channel-msg :message :body)))))
+    (if (:error channel-msg)
+      channel-msg ; push the original message with error state through the pipe...
+      (assoc channel-msg :message (xml/xml->clj (-> channel-msg :message :body))))
     (catch :default e
       (log/error e "Unexpected error parsing descriptor" channel-msg))))
 
@@ -118,12 +92,11 @@
   pieces. If the error flag is true, we just pass the original
   object through."
   [channel-msg]
-  (log/spy :trace "Desc anlzr out"
-           (if (:error channel-msg)
-             channel-msg ; push the original object through the pipeline.
-             (let [desc (:message channel-msg)]
-               (assoc channel-msg
-                      :message (case (:tag desc)
-                                 :root (analyze-device-descriptor desc)
-                                 :scpd (analyze-service-descriptor desc)
-                                 desc))))))
+  (if (:error channel-msg)
+    channel-msg ; push the original object through the pipeline.
+    (let [desc (:message channel-msg)]
+      (assoc channel-msg
+             :message (case (:tag desc)
+                        :root (analyze-device-descriptor desc)
+                        :scpd (analyze-service-descriptor desc)
+                        desc)))))

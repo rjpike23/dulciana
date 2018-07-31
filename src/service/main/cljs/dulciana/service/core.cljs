@@ -12,6 +12,7 @@
             [dulciana.service.net :as net]
             [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.discovery.core :as discovery]
+            [dulciana.service.upnp.description.core :as description]
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
@@ -60,15 +61,15 @@
 (. app (get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @upnp/*remote-devices*)))))))
+              (. res (send (pr-str (filter-pending @description/*remote-devices*)))))))
 (. app (get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @upnp/*remote-services*)))))))
+              (. res (send (pr-str (filter-pending @description/*remote-services*)))))))
 (. app (get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (@upnp/*remote-services* (.-svcid (.-params req)))))))))
+              (. res (send (pr-str (@description/*remote-services* (.-svcid (.-params req)))))))))
 (. app (get "/upnp/devices/"
             template-express-handler))
 (. app (get "/upnp/device/:devid"
@@ -76,7 +77,6 @@
 (. app (get "/"
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
-
 
 (defn notify []
   (log/trace "Sending announcements"))
@@ -95,7 +95,7 @@
   (try
     (start-notifications *announcement-interval*)
     (discovery/start-listeners)
-    (upnp/start-listeners)
+    (description/start-listeners)
     (reset! http-server
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
@@ -104,7 +104,7 @@
 
 (defn teardown []
   (stop-notifications)
-  (upnp/stop-listeners)
+  (description/stop-listeners)
   (discovery/stop-listeners @discovery/*sockets*)
   (.close @http-server))
 
