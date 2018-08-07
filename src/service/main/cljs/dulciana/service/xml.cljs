@@ -18,9 +18,6 @@
                [(subs (name k) (count "xmlns:")) v])
              (filter (fn [[k v]] (str/starts-with? (name k) "xmlns"))
                           attrs))))
-
-;; Converts namespace qualified tag keywords to arrays, [prefix tag ns-uri].
-;; Only for tags, not attributes.
 (defn munge-namespaces [xml ns-ctx]
   (if (and (map? xml) (:tag xml))
     (let [ns-cur (merge ns-ctx (ns-map (:attributes xml)))

@@ -20,9 +20,6 @@
 
 (def *event-server-port* 3200)
 
-;;; HTTP server socket for eventing:
-(defonce *event-server* (atom {}))
-
 (defn get-ifaces
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
   []
@@ -85,7 +82,7 @@
   (log/debug "Subscribe" announcement service)
   (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
                                        (:eventSubURL service)))
-        return-url (str "http://" (-> announcement :interface :address) ":" *event-server-port* "/events")]
+        return-url (str "http://" (-> announcement :local :address) ":" *event-server-port* "/events")]
      (send-http-request "SUBSCRIBE"
                        (.-hostname req-url)
                        (.-port req-url)
@@ -124,51 +121,3 @@
                         :HOST (str (.-host req-url))}
                        ""
                        nil)))
-
-;;; Handler for UPNP pub-sub events
-(defn respond [response code message]
-  (set! (.-statusCode response) code)
-  (set! (.-statusMessage response) message)
-  (.end response))
-
-(defn handle-pub-server-request
-  "Callback for when a pub-sub data event is received from an active socket."
-  [src request response]
-  (log/debug "UPnP server received" (.-method request) "request")
-  (case (.-method request)
-    "NOTIFY" (let [c (async/chan 1 (map (fn [msg]
-                                          {:message {:type :NOTIFY
-                                                     :body msg
-                                                     :headers (js->clj (.-headers request)
-                                                                       :keywordize-keys true)}
-                                           :ok #(respond response 200 "OK")
-                                           :error (partial respond response)})))]
-               (events/slurp c request)
-               (async/pipe c @parser/ssdp-event-channel false))
-    (do
-      (log/warn "UPnP server ignoring" (.-method request) "request")
-      (.writeHead response 405 "Method Not Allowed" (clj->js {"Allow" "NOTIFY"}))
-      (.end response "Method not allowed."))))
-
-;;; Fns to manage the HTTP server which supports eventing.
-(defn start-event-server
-  ""
-  []
-  (let [server (.createServer http)
-        evt-channels (events/listen* server ["request" "close"])]
-    (log/info "Starting event server.")
-    (go-loop []
-      (let [req (async/<! (:request evt-channels))]
-           (when req
-             (apply handle-pub-server-request req)
-             (recur))))
-    (go (async/<! (:close evt-channels))
-        (map async/close! (vals evt-channels))
-        (log/info "Event server closed."))
-    (.listen server *event-server-port*)
-    (reset! *event-server* server)))
-
-(defn stop-event-server
-  ""
-  []
-  (.close @*event-server*))

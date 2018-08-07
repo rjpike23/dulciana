@@ -53,13 +53,19 @@
 (defn expired? [now [key ann]]
   (< (:expiration ann) now))
 
-(defn get-announced-device-ids [announcement-map]
-  (set (map (fn [[k v]] (get-dev-id k)) announcement-map)))
+(defn get-announced-device-ids
+  ([]
+   (get-announced-device-ids @*announcements*))
+  ([announcement-map]
+   (set (map (fn [[k v]] (get-dev-id k)) announcement-map))))
 
-(defn get-announced-services-for-device [dev-id announcement-map]
-  (set (map (fn [[k v]] k)
-            (filter (fn [[k v]] (str/starts-with? k dev-id))
-                    announcement-map))))
+(defn get-announced-services-for-device
+  ([dev-id]
+   (get-announced-services-for-device dev-id @*announcements*))
+  ([dev-id announcement-map]
+   (set (map (fn [[k v]] k)
+             (filter (fn [[k v]] (str/starts-with? k dev-id))
+                     announcement-map)))))
 
 (defn find-announcement [dev-id]
   (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
@@ -137,16 +143,16 @@
     (async/take! (:listening channels)
                  (fn [[this :as msg]]
                    (when msg
-                     (log/debug "UDP Socket established")
+                     (log/debug "Socket established" (:address iface))
                      (net/add-membership sock (*ssdp-mcast-addresses* (:family iface)) (:address iface))
                      (swap! *sockets* assoc (:address iface) socket)
                      (send-ssdp-search-message iface))))
     (net/bind-udp-socket sock *ssdp-port* (:address iface))
     sock))
 
-(defn handle-message [[sock msg rinfo]]
+(defn handle-message [[sock msg rinfo iface]]
   {:message (.toString msg)
-   :local (js->clj (.address sock) :keywordize-keys true)
+   :local iface
    :remote (js->clj rinfo :keywordize-keys true)
    :timestamp (js/Date.)})
 
@@ -154,14 +160,15 @@
   (let [ssdp-chan (async/chan 1 (comp (map handle-message)
                                       (map messages/ssdp-parse)
                                       (map messages/ssdp-analyzer)))]
-    (async/pipe (async/merge (map #(let [{:keys [socket channels]} (start-listener %)]
-                                     (:message channels))
+    (async/pipe (async/merge (map (fn [iface]
+                                    (let [{:keys [socket channels]} (start-listener iface)]
+                                      (async/pipe (:message channels)
+                                                  (async/chan 1 (map #(conj % iface))))))
                                   (net/get-ifaces)))
                 ssdp-chan)
-    (reset! *ssdp-pub* (async/pub ssdp-chan :type))
-    (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification)))
+    (reset! *ssdp-pub* (async/pub ssdp-chan :type)))
+    (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification))
 
 (defn stop-listeners [sockets]
   (doseq [[k socket] sockets]
     (.close socket)))
-

@@ -29,12 +29,17 @@
 (defonce *remote-services-sub* (atom nil))
 
 (defn find-device [dev-id]
-  (@*remote-devices* dev-id))
+  (some (fn [[k v]] (and (= (discovery/get-dev-id k)) v))
+        @*remote-devices*))
+
+(defn find-all-service-ids-for-device [dev-id]
+  (map #(:serviceId %)
+       (-> (find-device dev-id) :device :serviceList)))
 
 (defn find-service [dev-id svc-id]
   (let [dev (find-device dev-id)]
     (when dev
-      (some #(when (= (:serviceId %) svc-id) %)
+      (some #(and (= (:serviceId %) svc-id) %)
             (-> dev :device :serviceList)))))
 
 (defn find-scpd [svc-usn]

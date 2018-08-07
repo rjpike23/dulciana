@@ -26,23 +26,6 @@
     :service
     :device))
 
-(defn event-parse [msg]
-  (try
-    (assoc msg :message {:body (xml/xml->clj (-> msg :message :body))
-                         :type :NOTIFY
-                         :headers (-> msg :message :headers)})
-    (catch :default e
-      ((:error msg) 400 "Malformed message")
-      (throw e))))
-
-#_(defn event-analyzer [msg]
-  (let [m (munge-namespaces (-> msg :message :body) {})]
-    (assoc msg :message {:body (apply merge ((xml-list
-                                              {["property" "urn:schemas-upnp-org:event-1-0"] (xml-map {} :include-unspec-elt true)})
-                                             m))
-                         :type :NOTIFY
-                         :headers (-> msg :message :headers)})))
-
 (defonce descriptor-channel (atom nil))
 (defonce descriptor-publisher (atom nil))
 

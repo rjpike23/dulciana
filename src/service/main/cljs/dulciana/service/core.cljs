@@ -10,9 +10,9 @@
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
             [dulciana.service.net :as net]
-            [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.discovery.core :as discovery]
             [dulciana.service.upnp.description.core :as description]
+            [dulciana.service.upnp.eventing.core :as eventing]
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
@@ -96,6 +96,7 @@
     (start-notifications *announcement-interval*)
     (discovery/start-listeners)
     (description/start-listeners)
+    (eventing/start-event-server)
     (reset! http-server
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
@@ -104,6 +105,7 @@
 
 (defn teardown []
   (stop-notifications)
+  (eventing/stop-event-server)
   (description/stop-listeners)
   (discovery/stop-listeners @discovery/*sockets*)
   (.close @http-server))
