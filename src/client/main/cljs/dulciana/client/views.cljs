@@ -8,7 +8,9 @@
   (:require [re-frame.core :as rf]
             [secretary.core :as secretary]
             [cemerick.url :as url]
-            [taoensso.timbre :as log :include-macros true]))
+            [taoensso.timbre :as log :include-macros true]
+            [dulciana.client.routes :as routes]))
+
 
 (defn bootstrap-3by-table [components]
   (vec (concat [:div.col]
@@ -23,7 +25,7 @@
   [:div.col-md
    [:div.card {:key (-> device :device :UDN)}
     [:button.card-title.btn.btn-primary
-     {:on-click #(.setToken dulciana.client.core/history (str "upnp/device/" (-> device :device :UDN)))}
+     {:on-click #(.setToken routes/*history* (str "upnp/device/" (-> device :device :UDN)))}
      (-> device :device :friendlyName)]
     [:h6.card-subtitle (-> device :device :modelDescription)]
     [:dl.card-body
@@ -43,7 +45,7 @@
   [:div.col-md
    [:div.card {:key (:serviceId svc)}
     [:button.card-title.btn.btn-primary
-     {:on-click #(.setToken dulciana.client.core/history (str "upnp/device/" (:UDN device)
+     {:on-click #(.setToken routes/*history* (str "upnp/device/" (:UDN device)
                                                               "/service/" (:serviceId svc)))}
      (:serviceId svc)]
     [:dl.card-body

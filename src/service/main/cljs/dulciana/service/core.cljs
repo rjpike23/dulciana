@@ -23,8 +23,8 @@
 
 (defonce *announcement-interval* 90000)
 
-(defonce http-server (atom nil))
-(defonce ssdp-announcement-timer (atom nil))
+(defonce *http-server* (atom nil))
+(defonce *ssdp-announcement-timer* (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -51,7 +51,7 @@
 (def app (express))
 
 (defn filter-pending [map]
-  (into {} (filter (fn [[k v]] (not= :pending v)) map)))
+  (into {} (filter (fn [[k v]] (not= (type v) Atom)) map)))
 
 (. app use "/resources" (. express (static "target")))
 (. app (get "/api/upnp/announcements"
@@ -69,10 +69,12 @@
 (. app (get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (@description/*remote-services* (.-svcid (.-params req)))))))))
+              (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req))))))))))
 (. app (get "/upnp/devices/"
             template-express-handler))
 (. app (get "/upnp/device/:devid"
+            template-express-handler))
+(. app (get "/upnp/device/:devid/service/:svcid"
             template-express-handler))
 (. app (get "/"
             (fn [req res]
@@ -82,12 +84,12 @@
   (log/trace "Sending announcements"))
 
 (defn start-notifications [interval]
-  (reset! ssdp-announcement-timer (js/setInterval notify interval)))
+  (reset! *ssdp-announcement-timer* (js/setInterval notify interval)))
 
 (defn stop-notifications []
-  (when @ssdp-announcement-timer
-    (js/clearInterval @ssdp-announcement-timer))
-  (reset! ssdp-announcement-timer nil))
+  (when @*ssdp-announcement-timer*
+    (js/clearInterval @*ssdp-announcement-timer*))
+  (reset! *ssdp-announcement-timer* nil))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
@@ -97,7 +99,7 @@
     (discovery/start-listeners)
     (description/start-listeners)
     (eventing/start-event-server)
-    (reset! http-server
+    (reset! *http-server*
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
     (catch :default e
@@ -108,7 +110,7 @@
   (eventing/stop-event-server)
   (description/stop-listeners)
   (discovery/stop-listeners @discovery/*sockets*)
-  (.close @http-server))
+  (.close @*http-server*))
 
 (defn fig-reload-hook []
   (teardown)

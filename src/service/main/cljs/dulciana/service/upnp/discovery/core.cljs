@@ -128,7 +128,7 @@
   Adding additional consumers to :close, :error or :listening channels may cause problems.
   The :message channel is returned without a consumer. An external consumer must be
   configured by the caller or UDP messages will be dropped."
-  [iface]
+  [[name iface]]
   (let [{:keys [socket channels] :as sock} (net/create-udp-socket (*ssdp-protocols* (:family iface)))]
     (async/take! (:close channels)
                  (fn [[this]]
@@ -144,27 +144,31 @@
                  (fn [[this :as msg]]
                    (when msg
                      (log/debug "Socket established" (:address iface))
-                     (net/add-membership sock (*ssdp-mcast-addresses* (:family iface)) (:address iface))
-                     (swap! *sockets* assoc (:address iface) socket)
-                     (send-ssdp-search-message iface))))
+                     (try
+                       (net/add-membership sock (*ssdp-mcast-addresses* (:family iface)) (:address iface))
+                       (swap! *sockets* assoc (:address iface) socket)
+                       (send-ssdp-search-message iface)
+                       (catch :default err
+                         (log/error err "Error joining multicast group on" (:address iface)))))))
     (net/bind-udp-socket sock *ssdp-port* (:address iface))
     sock))
 
-(defn handle-message [[sock msg rinfo iface]]
+(defn create-message-map [[sock msg rinfo iface]]
   {:message (.toString msg)
    :local iface
    :remote (js->clj rinfo :keywordize-keys true)
    :timestamp (js/Date.)})
 
 (defn start-listeners []
-  (let [ssdp-chan (async/chan 1 (comp (map handle-message)
+  (let [ssdp-chan (async/chan 1 (comp (map create-message-map)
                                       (map messages/ssdp-parse)
                                       (map messages/ssdp-analyzer)))]
     (async/pipe (async/merge (map (fn [iface]
                                     (let [{:keys [socket channels]} (start-listener iface)]
                                       (async/pipe (:message channels)
                                                   (async/chan 1 (map #(conj % iface))))))
-                                  (net/get-ifaces)))
+                                  (filter (fn [[k v]] v)
+                                          (net/get-ifaces))))
                 ssdp-chan)
     (reset! *ssdp-pub* (async/pub ssdp-chan :type)))
     (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification))

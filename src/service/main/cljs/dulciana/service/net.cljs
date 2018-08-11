@@ -23,8 +23,12 @@
 (defn get-ifaces
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
   []
-  (filter #(not (% :internal))
-          (flatten (vals (js->clj (os/networkInterfaces) :keywordize-keys true)))))
+  (let [ifaces (js->clj (os/networkInterfaces) :keywordize-keys true)]
+    (into {}
+          (map (fn [[name addrs]]
+                 [name (some (fn [addr] (and (not (:internal addr)) addr))
+                             addrs)])
+               ifaces))))
 
 (defn create-udp-socket [prot-family]
   (let [socket (dgram/createSocket prot-family)

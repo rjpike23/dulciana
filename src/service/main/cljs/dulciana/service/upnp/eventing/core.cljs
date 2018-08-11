@@ -164,5 +164,6 @@
 (defn stop-event-server
   ""
   []
-  (.close @*event-server*)
+  (when @*event-server*
+    (.close @*event-server*))
   (async/close! @*event-channel*))

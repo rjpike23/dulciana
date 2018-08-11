@@ -9,7 +9,6 @@
             [tubax.core :as xml]
             [tubax.helpers :as xml-util]))
 
-
 ;; Hack city, next 2 functions. data.xml does not support node-js and
 ;; tubax does not support xml namespaces, so gotta do this mess:
 (defn ns-map [attrs]

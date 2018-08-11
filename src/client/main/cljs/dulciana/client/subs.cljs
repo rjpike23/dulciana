@@ -6,7 +6,8 @@
 
 (ns dulciana.client.subs
   (:require [clojure.string :as str]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [taoensso.timbre :as log :include-macros true]))
 
 (rf/reg-sub
  :view
@@ -73,4 +74,5 @@
    [(rf/subscribe [:selected-service-id])
     (rf/subscribe [:services])])
  (fn [[svc-id services]]
+   (log/info ":selected-service sub" svd-id services)
    (services svc-id)))

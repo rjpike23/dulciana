@@ -6,6 +6,7 @@
 
 (ns dulciana.client.events
   (:require [re-frame.core :as rf]
+            [taoensso.timbre :as log :include-macros true]
             [dulciana.client.db :as db]))
 
 (rf/reg-event-fx
@@ -33,14 +34,17 @@
 (rf/reg-event-db
  :devices-received
  (fn [db [_ devs]]
+   (log/info ":devices-received")
    (assoc-in db [:remote :devices] devs)))
 
 (rf/reg-event-db
  :services-received
  (fn [db [_ svcs]]
+   (log/info ":services-received")
    (assoc-in db [:remote :services] svcs)))
 
 (rf/reg-event-db
  :announcements-received
  (fn [db [_ announcements]]
+   (log/info ":announcements-received")
    (assoc-in db [:remote :announcements] announcements)))

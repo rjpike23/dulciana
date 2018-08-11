@@ -9,19 +9,13 @@
   (:require [cljs.reader :refer [read-string]]
             [ajax.core :as ajax]
             [devtools.core :as devtools]
-            [goog.events :as goog-events]
             [reagent.core :as reagent]
             [re-frame.core :as rf]
-            [secretary.core :as secretary :refer-macros [defroute]]
-            [taoensso.timbre :as timbre
-             :refer-macros [log trace debug info warn error fatal report
-                            logf tracef debugf infof warnf errorf fatalf reportf
-                            spy get-env]]
+            [taoensso.timbre :as log :include-macros true]
             [dulciana.client.events :as events]
             [dulciana.client.subs :as subs]
-            [dulciana.client.views :as views])
-  (:import [goog History]
-           [goog.history Html5History EventType]))
+            [dulciana.client.views :as views]
+            [dulciana.client.routes :as routes]))
 
 (enable-console-print!)
 (devtools/install!)
@@ -30,17 +24,8 @@
   (into (sorted-map) (read-string response)))
 
 (defn dispatch-response [event response]
+  (log/info "RESPONSE RCVD" event response)
   (rf/dispatch [event (parse-edn response)]))
-
-(defonce history
-  (doto (Html5History.)
-    (.setUseFragment false)
-    (goog-events/listen EventType.NAVIGATE #(secretary/dispatch! (str (.-token %))))
-    (.setEnabled true)))
-
-(defroute "/upnp/devices" [] (rf/dispatch [:view-devices]))
-(defroute "/upnp/device/:devid/service/:svcid" [devid svcid] (rf/dispatch [:view-service devid svcid]))
-(defroute "/upnp/device/:id" [id] (rf/dispatch [:view-device id]))
 
 (defn run []
   (rf/dispatch-sync [:initialize-db])
