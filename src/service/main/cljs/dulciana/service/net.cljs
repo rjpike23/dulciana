@@ -50,17 +50,6 @@
   (.close (:socket socket))
   socket)
 
-(defn handle-http-response [result-chan opts res]
-  (let [body-chan (async/chan)]
-    (events/slurp body-chan res)
-    (async/go
-      (async/>! result-chan {:message {:status-code (.-statusCode res)
-                                       :status-message (.-statusMessage res)
-                                       :body (async/<! body-chan)
-                                       :headers (js->clj (.-headers res) :keywordize-keys true)}
-                             :opts opts
-                             :rvcd (js/Date.)}))))
-
 (defn send-http-request
   "Retuns a channel."
   ([method url-string headers opts]
@@ -76,7 +65,24 @@
                   :method method
                   :headers (clj->js headers)}
          result-chan (async/chan 1)
-         req (.request http (clj->js options) (partial handle-http-response result-chan opts))]
+         req (.request http (clj->js options))
+         req-channels (events/listen* req [:response :error])]
+     (async/take! (:error req-channels)
+                  (fn [[this err]]
+                    (async/go
+                      (async/>! result-chan err)
+                      (async/close! result-chan))))
+     (async/take! (:response req-channels)
+                  (fn [[this res]]
+                    (let [body-chan (async/chan)]
+                      (events/slurp body-chan res)
+                      (async/go
+                        (async/>! result-chan {:message {:status-code (.-statusCode res)
+                                                         :status-message (.-statusMessage res)
+                                                         :body (async/<! body-chan)
+                                                         :headers (js->clj (.-headers res) :keywordize-keys true)}
+                                               :opts options
+                                               :rcvd (js/Date.)})))))
      (.end req body)
      result-chan)))
 

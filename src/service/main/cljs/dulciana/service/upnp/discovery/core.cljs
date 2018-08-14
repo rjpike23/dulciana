@@ -83,7 +83,7 @@
   A socket for the interface should have previously
   been opened with start-listener. See nodejs dgram.send()."
   [iface message]
-  (log/trace "Sending SSDP message" message)
+  (log/trace "Sending SSDP message" iface message)
   (when-let [socket (@*sockets* (iface :address))]
     (.send socket message *ssdp-port* (*ssdp-mcast-addresses* (iface :family)))))
 
@@ -118,6 +118,9 @@
       "ssdp:update" (update-announcements *announcements* notification)
       "ssdp:byebye" (remove-announcements *announcements* notification)
       (log/warn "Ignoring announcement type" notify-type))))
+
+(defn process-ssdp-response [response]
+  (update-announcements *announcements* response))
 
 (defn start-listener
   "Starts an SSDP listener on the specified interface. Returns a map with two entries,
@@ -171,7 +174,8 @@
                                           (net/get-ifaces))))
                 ssdp-chan)
     (reset! *ssdp-pub* (async/pub ssdp-chan :type)))
-    (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification))
+  (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification)
+  (events/channel-driver (async/sub @*ssdp-pub* :RESPONSE (async/chan)) process-ssdp-response))
 
 (defn stop-listeners [sockets]
   (doseq [[k socket] sockets]

@@ -88,7 +88,7 @@
                     (swap! calls conj :close))
         sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
-      (let [result (discovery/start-listener iface)]
+      (let [result (discovery/start-listener [:em0 iface])]
         (.emit sock-mock "listening")
         (.emit sock-mock "message" "hello")
         (.emit sock-mock "close")
@@ -121,7 +121,7 @@
                       (.emit this "close")))
         sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
-      (let [result (discovery/start-listener iface)]
+      (let [result (discovery/start-listener [:em0 iface])]
         (.emit sock-mock "error" (js/Error. "Testing"))
         (async done
                (async/go

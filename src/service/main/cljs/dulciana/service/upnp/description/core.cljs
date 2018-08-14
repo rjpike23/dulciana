@@ -29,7 +29,7 @@
 (defonce *remote-services-sub* (atom nil))
 
 (defn find-device [dev-id]
-  (some (fn [[k v]] (and (= (discovery/get-dev-id k)) v))
+  (some (fn [[k v]] (and (= (discovery/get-dev-id k) dev-id) v))
         @*remote-devices*))
 
 (defn find-all-service-ids-for-device [dev-id]
