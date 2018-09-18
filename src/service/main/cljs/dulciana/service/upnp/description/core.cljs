@@ -28,6 +28,8 @@
 
 (defonce *remote-services-sub* (atom nil))
 
+(defonce *local-devices* (atom nil))
+
 (defn find-device [dev-id]
   (some (fn [[k v]] (and (= (discovery/get-dev-id k) dev-id) v))
         @*remote-devices*))
@@ -118,8 +120,8 @@
 
 (defn stop-listeners []
   (async/unsub *remote-services-pub* :update @*remote-services-sub*)
-  (async/close! @*remote-services-sub*)
+  (when @*remote-services-sub* (async/close! @*remote-services-sub*))
   (async/unsub *remote-devices-pub* :update @*remote-devices-sub*)
-  (async/close! @*remote-devices-sub*)
+  (when @*remote-devices-sub* (async/close! @*remote-devices-sub*))
   (async/unsub discovery/*announcements-pub* :update @*announcements-sub*)
-  (async/close! @*announcements-sub*))
+  (when @*announcement-sub* (async/close! @*announcements-sub*)))

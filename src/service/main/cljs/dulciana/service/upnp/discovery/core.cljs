@@ -23,15 +23,25 @@
                        "IPv6" "udp6"})
 (def *ssdp-port* 1900)
 
+(defonce *announcement-interval* 90000)
+
+(defonce *ssdp-announcement-timer* (atom nil))
+
 ;;; SSDP module state vars:
 ;;; Map of open sockets:
 (defonce *sockets* (atom {}))
+
 ;;; Publication of SSDP messages
 (defonce *ssdp-pub* (atom nil))
 
+;;; A map of all received announcements.
 (defonce *announcements* (atom {}))
 
+;;; A core.async/pub of updates to the *announcements* atom.
 (defonce *announcements-pub* (events/wrap-atom *announcements*))
+
+;;; A queue of announcements to be sent by this server.
+(defonce *announcement-queue* (atom []))
 
 (defn create-usn
   "Constructs a USN from the device id and service id."
@@ -91,6 +101,27 @@
   "Sends a M-SEARCH SSDP Discovery message on all enabled interfaces."
   [iface]
   (send-ssdp-message iface (messages/emit-m-search-msg)))
+
+(defn send-ssdp-alive [iface service device-descriptor]
+  ; TODO: gotta send a message for each service
+  (send-ssdp-message iface (messages/emit-notify-msg "location" "ssdp:alive" "nt" "usn")))
+
+(defn send-ssdp-byebye [iface service device-descriptor]
+  ; TODO: blah blah blah
+  (send-ssdp-message iface (messages/emit-device-goodbye "nt" "usn")))
+
+(defn queue-device-announcements [device-descriptor])
+
+(defn notify []
+  (log/info "Notify!"))
+
+(defn start-notifications []
+  (reset! *ssdp-announcement-timer* (js/setInterval notify *announcement-interval*)))
+
+(defn stop-notifications []
+  (when @*ssdp-announcement-timer*
+    (js/clearInterval @*ssdp-announcement-timer*))
+  (reset! *ssdp-announcement-timer* nil))
 
 (defn remove-expired-items [items]
   (into {} (filter (comp not (partial expired? (js/Date.))) items)))
@@ -177,6 +208,9 @@
   (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification)
   (events/channel-driver (async/sub @*ssdp-pub* :RESPONSE (async/chan)) process-ssdp-response))
 
-(defn stop-listeners [sockets]
-  (doseq [[k socket] sockets]
-    (.close socket)))
+(defn stop-listeners
+  ([]
+   (stop-listeners @*sockets*))
+  ([sockets]
+   (doseq [[k socket] sockets]
+     (.close socket))))

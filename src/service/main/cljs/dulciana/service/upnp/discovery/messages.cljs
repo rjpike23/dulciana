@@ -27,12 +27,19 @@
                           :mx 5
                           :st "ssdp:all"}))
 
-(defn emit-notify-msg [scdp-location notify-type usn]
+(defn emit-notify-msg [scdp-location nts notify-type usn]
   (emit-ssdp-request-msg "NOTIFY" "*"
                          {:host "239.255.255.250:1900"
                           :location scdp-location
                           :nt notify-type
-                          :nts "ssdp:update"
+                          :nts nts
+                          :usn usn}))
+
+(defn emit-device-goodbye [notify-type usn]
+  (emit-ssdp-request-msg "NOTIFY" "*"
+                         {:host "239.255.255.250:1900"
+                          :nt notify-type
+                          :nts "ssdp:byebye"
                           :usn usn}))
 
 (defn emit-subscribe-msg [pub-host pub-path callback-url state-vars]

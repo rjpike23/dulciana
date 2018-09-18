@@ -8,9 +8,58 @@
   (:require [cljs.core.async :as async]
             [clojure.set :as set]
             [taoensso.timbre :as log :include-macros true]
+            [express :as express]
             [url :as url]
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.upnp.discovery.core :as discovery]
-            [dulciana.service.upnp.description.core :as description]))
+            [dulciana.service.upnp.description.core :as description]
+            [dulciana.service.upnp.eventing.core :as eventing]))
+
+(defonce *upnp-http-server* (atom {}))
+
+(defonce *local-devices* (atom {}))
+
+(def *upnp-app* (express))
+
+(. *upnp-app* (get "/upnp/devices/:devid/devdesc.xml" (fn [req res]
+                                                        (log/info "Got dev desc request")
+                                                        (. res (send "Thanks")))))
+(. *upnp-app* (get "/upnp/services/:usn/scpd.xml" (fn [req res]
+                                                    (log/info "Get scpd request")
+                                                    (. res (send "Thanks")))))
+(. *upnp-app* (notify "/upnp/events" (fn [req res]
+                                       (log/info "Got event notify request")
+                                       (. res (send "Thanks")))))
+(. *upnp-app* (subscribe "/upnp/services/:usn/eventing"
+                         (fn [req res]
+                           (log/info "Got subscribe request")
+                           (. res (send "Thanks")))))
+(. *upnp-app* (unsubscribe "/upnp/services/:usn/eventing"
+                           (fn [req res]
+                             (log/info "Got unsubscribe request")
+                             (. res (send "Thanks")))))
+(. *upnp-app* (post "/upnp/services/:usn/control"
+                    (fn [req res]
+                      (log/info "Got control request")
+                      (. res (send "Thanks")))))
  
+(defn register-device [device-descriptor]
+  (when (@*local-devices* (:UDN device-descriptor))
+    (swap! *local-devices* assoc (:UDN device-descriptor) device-descriptor)
+    (discovery/queue-device-announcements device-descriptor)))
+
+(defn deregister-devices [devid]
+  (swap! *local-devices* dissoc devid))
+
+(defn start-upnp-services []
+  (discovery/start-listeners)
+  (discovery/start-notifications)
+  (description/start-listeners)
+  (eventing/start-event-server))
+
+(defn stop-upnp-services []
+  (eventing/stop-event-server)
+  (description/stop-listeners)
+  (discovery/stop-notifications)
+  (discovery/stop-listeners))

@@ -10,21 +10,19 @@
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
             [dulciana.service.net :as net]
-            [dulciana.service.upnp.discovery.core :as discovery]
+            [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.description.core :as description]
-            [dulciana.service.upnp.eventing.core :as eventing]
+            [dulciana.service.upnp.discovery.core :as discovery]
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [http :as http]
             [source-map-support :as sms]))
 
-(sms/install)
 (nodejs/enable-util-print!)
 
-(defonce *announcement-interval* 90000)
+(sms/install)
 
 (defonce *http-server* (atom nil))
-(defonce *ssdp-announcement-timer* (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -80,25 +78,11 @@
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
 
-(defn notify []
-  (log/trace "Sending announcements"))
-
-(defn start-notifications [interval]
-  (reset! *ssdp-announcement-timer* (js/setInterval notify interval)))
-
-(defn stop-notifications []
-  (when @*ssdp-announcement-timer*
-    (js/clearInterval @*ssdp-announcement-timer*))
-  (reset! *ssdp-announcement-timer* nil))
-
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
 (defn setup []
   (try
-    (start-notifications *announcement-interval*)
-    (discovery/start-listeners)
-    (description/start-listeners)
-    (eventing/start-event-server)
+    (upnp/start-upnp-services)
     (reset! *http-server*
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
@@ -106,10 +90,7 @@
       (log/error "Error while starting Dulciana." e))))
 
 (defn teardown []
-  (stop-notifications)
-  (eventing/stop-event-server)
-  (description/stop-listeners)
-  (discovery/stop-listeners @discovery/*sockets*)
+  (upnp/stop-upnp-services)
   (.close @*http-server*))
 
 (defn fig-reload-hook []
@@ -118,6 +99,7 @@
 
 (defn -main [& args]
   (setup)
-  (.on nodejs/process "beforeExit" teardown))
+  (.on nodejs/process "beforeExit" teardown)
+  (.on nodejs/process "uncaughtException" teardown))
 
 (set! *main-cli-fn* -main)
