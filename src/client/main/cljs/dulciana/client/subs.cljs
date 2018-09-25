@@ -74,5 +74,5 @@
    [(rf/subscribe [:selected-service-id])
     (rf/subscribe [:services])])
  (fn [[svc-id services]]
-   (log/info ":selected-service sub" svd-id services)
+   (log/info ":selected-service sub" svc-id services)
    (services svc-id)))

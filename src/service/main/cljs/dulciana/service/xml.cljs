@@ -39,13 +39,14 @@
   [spec & {:keys [include-unspec-elt] :or {:include-unspec-elt false}}]
   (fn [node]
     (into {} (reduce (fn [out child]
-                       (if-let [spec-fun (spec (:tag child))]
-                         (cons [(:tag child) (spec-fun child)] out)
-                         (if include-unspec-elt
-                           (cons [(:tag child) (xml-util/text child)] out)
-                           out)))
+                       (let [tag (or (:tag child) (first child))]
+                         (if-let [spec-fun (spec tag)]
+                           (cons [tag (spec-fun child)] out)
+                           (if (and (:tag child) include-unspec-elt)
+                             (cons [(:tag child) (xml-util/text child)] out)
+                             out))))
                      '()
-                     (node :content)))))
+                     (concat (:attributes node) (:content node))))))
 
 (defn xml-list
   "Returns a function that converts an xml-clj data structure into a list, based

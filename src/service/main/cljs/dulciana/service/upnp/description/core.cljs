@@ -124,4 +124,4 @@
   (async/unsub *remote-devices-pub* :update @*remote-devices-sub*)
   (when @*remote-devices-sub* (async/close! @*remote-devices-sub*))
   (async/unsub discovery/*announcements-pub* :update @*announcements-sub*)
-  (when @*announcement-sub* (async/close! @*announcements-sub*)))
+  (when @*announcements-sub* (async/close! @*announcements-sub*)))
