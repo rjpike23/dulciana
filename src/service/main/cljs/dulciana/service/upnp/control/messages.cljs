@@ -9,16 +9,26 @@
 (defn emit-prop-val-xml [[n v]]
   (str "<" (name n) ">" v "</" (name n) ">"))
 
-(defn emit-control-soap-msg [service-type action-name params]
+(defn emit-soap-msg [body]
   (str "<?xml version=\"1.0\"?>\r\n"
        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
        "<s:Body>"
-       "<u:" action-name " xmlns:u=\"" service-type "\">"
-       (apply str (map emit-prop-val-xml params))
-       "</u:" action-name ">"
+       body
        "</s:Body>"
        "</s:Envelope>"))
+
+(defn emit-control-request [service-type action-name params]
+  (emit-soap-msg
+   (str  "<u:" action-name " xmlns:u=\"" service-type "\">"
+         (apply str (map emit-prop-val-xml params))
+         "</u:" action-name ">")))
+
+(defn emit-control-response [service-type action-name params]
+  (emit-soap-msg
+   (str "<u:" action-name "Response xmlns:u=\"" service-type "\">"
+        (apply str (map emit-prop-val-xml params))
+        "</u:" action-name "Response>")))
 
 (defn emit-event-prop-xml [[name value]]
   (str "<s:property>"

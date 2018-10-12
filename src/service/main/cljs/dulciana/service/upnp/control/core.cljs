@@ -9,7 +9,7 @@
             [dulciana.service.upnp.control.messages :as msg]))
 
 (defn send-control-request [url service-type action-name params]
-  (let [msg (msg/emit-control-soap-msg service-type action-name params)
+  (let [msg (msg/emit-control-request service-type action-name params)
         hdrs {"USER-AGENT" "Unix/5.0 UPnP/2.0 dulciana/1.0"
               "SOAPACTION" (str "\"" service-type "#" action-name "\"")}]
     (net/send-http-request "POST" url {:body msg
