@@ -13,8 +13,16 @@
             [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.discovery.core :as discovery]
+            [taoensso.sente :as sente]
+            [taoensso.sente.server-adapters.express :as sente-express]
             [taoensso.timbre :as log :include-macros true]
+            [body-parser :as body-parser]
+            [cookie-parser :as cookie-parser]
+            [csurf :as csurf]
             [express :as express]
+            [express-session :as express-session]
+            [express-ws :as express-ws]
+            [ws :as ws]
             [http :as http]
             [source-map-support :as sms]))
 
@@ -22,7 +30,19 @@
 
 (sms/install)
 
+;; Websocket/Sente initialization:
+(let [packer :edn
+      {:keys [ch-recv send-fn ajax-post-fn ajax-get-or-ws-handshake-fn connected-uids]}
+      (sente-express/make-express-channel-socket-server! {:packer packer
+                                                         :user-id-fn (fn [ring-req] (aget (:body ring-req) "session" "uid"))})]
+  (def ajax-post ajax-post-fn)
+  (def ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
+  (def ch-chsk ch-recv)
+  (def chsk-send! send-fn)
+  (def connected-uids connected-uids))
+
 (defonce *http-server* (atom nil))
+(defonce *sente-router* (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -46,37 +66,57 @@
   (. res (set "Access-Control-Allow-Origin" "*"))
   (. res (send (template))))
 
-(def app (express))
-
 (defn filter-pending [map]
   (into {} (filter (fn [[k v]] (not= (type v) Atom)) map)))
 
-(. app use "/resources" (. express (static "target")))
-(. app (get "/api/upnp/announcements"
-            (fn [req res]
-              (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @discovery/*announcements*))))))
-(. app (get "/api/upnp/devices"
-            (fn [req res]
-              (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @description/*remote-devices*)))))))
-(. app (get "/api/upnp/services"
-            (fn [req res]
-              (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @description/*remote-services*)))))))
-(. app (get "/api/upnp/services/:svcid"
-            (fn [req res]
-              (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req))))))))))
-(. app (get "/upnp/devices/"
-            template-express-handler))
-(. app (get "/upnp/device/:devid"
-            template-express-handler))
-(. app (get "/upnp/device/:devid/service/:svcid"
-            template-express-handler))
-(. app (get "/"
-            (fn [req res]
-              (. res (redirect "/upnp/devices")))))
+(def app (express))
+(def ws-app (express-ws app))
+
+(doto app
+  (.use (express-session #js {:secret "Dulciana-DLNA"
+                      :resave true
+                      :cookie {}
+                      :store (.MemoryStore express-session)
+                      :saveUninitialized true}))
+  (.use (.urlencoded body-parser
+                     #js {:extended false}))
+  (.use (cookie-parser "Dulciana-DLNA"))
+  (.use (csurf #js {:cookie false}))
+  (.use "/resources" (. express (static "target")))
+  (.get "/api/upnp/announcements"
+     (fn [req res]
+       (. res (set "Content-Type" "application/edn"))
+       (. res (send (pr-str @discovery/*announcements*)))))
+  (.get "/api/upnp/devices"
+     (fn [req res]
+       (. res (set "Content-Type" "application/edn"))
+       (. res (send (pr-str (filter-pending @description/*remote-devices*))))))
+  (.get "/api/upnp/services"
+     (fn [req res]
+       (. res (set "Content-Type" "application/edn"))
+       (. res (send (pr-str (filter-pending @description/*remote-services*))))))
+  (.get "/api/upnp/services/:svcid"
+     (fn [req res]
+       (. res (set "Content-Type" "application/edn"))
+       (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req)))))))))
+  (.ws "/api/upnp/updates"
+     (fn [ws req]
+       (ajax-get-or-ws-handshake req nil nil {:websocket? true
+                                              :websocket ws})))
+  (.get "/api/upnp/updates" ajax-get-or-ws-handshake)
+  (.post "/api/upnp/updates" ajax-post)
+  (.get "/upnp/devices/"
+     template-express-handler)
+  (.get "/upnp/device/:devid"
+     template-express-handler)
+  (.get "/upnp/device/:devid/service/:svcid"
+     template-express-handler)
+  (.get "/"
+     (fn [req res]
+       (. res (redirect "/upnp/devices")))))
+
+(defn sente-event-handler [msg]
+  (log/info "Received WS msg!" msg))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
@@ -86,11 +126,14 @@
     (reset! *http-server*
             (doto (.createServer http #(app %1 %2))
               (.listen 3000)))
+    (reset! *sente-router*
+            (sente/start-chsk-router! ch-chsk sente-event-handler))
     (catch :default e
       (log/error "Error while starting Dulciana." e))))
 
 (defn teardown []
   (upnp/stop-upnp-services)
+  (when-let [stop-fn @*sente-router*] (stop-fn))
   (.close @*http-server*))
 
 (defn fig-reload-hook []

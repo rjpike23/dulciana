@@ -27,6 +27,7 @@
                  [macchiato/hiccups "0.4.1"]
                  [cljs-ajax "0.6.0"]
                  [funcool/tubax "0.2.0"]
+                 [com.taoensso/sente "1.13.1"]
                  [com.taoensso/timbre "4.10.0"]]
   :plugins [[lein-cljsbuild "1.1.7"]
             [org.clojure/clojurescript "1.10.339"]
@@ -44,6 +45,11 @@
                                     :source-map true
                                     :install-deps true
                                     :npm-deps {:express "4.15.3"
+                                               :express-ws "4.0.0"
+                                               :body-parser "1.18.3"
+                                               :cookie-parser "1.4.3"
+                                               :express-session "1.15.6"
+                                               :csurf "1.9.0"
                                                :source-map-support "0.5.0"
                                                :ws "3.2.0"
                                                :sax "1.2.2"
@@ -60,6 +66,7 @@
                                    :source-map true
                                    :install-deps true
                                    :npm-deps {:react "15.6.0"
+                                              :websocket "1.0.28"
                                               :react-dom "15.6.0"}}}]}
   :figwheel {}
   :repl-options {:nrepl-middleware [cider.piggieback/wrap-cljs-repl]})

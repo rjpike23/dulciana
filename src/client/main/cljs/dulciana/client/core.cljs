@@ -11,6 +11,7 @@
             [devtools.core :as devtools]
             [reagent.core :as reagent]
             [re-frame.core :as rf]
+            [taoensso.sente :as sente]
             [taoensso.timbre :as log :include-macros true]
             [dulciana.client.events :as events]
             [dulciana.client.subs :as subs]
@@ -19,6 +20,13 @@
 
 (enable-console-print!)
 (devtools/install!)
+
+(let [{:keys [chsk ch-recv send-fn state]}
+      (sente/make-channel-socket! "/api/upnp/updates" {:type :auto})]
+  (def chsk chsk)
+  (def ch-chsk ch-recv)
+  (def chsk-send! send-fn)
+  (def chsk-state state))
 
 (defn parse-edn [response]
   (into (sorted-map) (read-string response)))
