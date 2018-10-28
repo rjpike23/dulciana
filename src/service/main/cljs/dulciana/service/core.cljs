@@ -36,7 +36,6 @@
 (defonce *event-connections* (atom nil))
 (defonce *http-server* (atom nil))
 (defonce *ws-server* (atom nil))
-(defonce *sente-chsk* (atom nil))
 
 (defn template []
   (hiccups/html5 [:html

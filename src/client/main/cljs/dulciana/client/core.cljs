@@ -21,17 +21,22 @@
 (enable-console-print!)
 (devtools/install!)
 
+(defonce *event-channel* (atom nil))
+(defonce *event-sender* (atom nil))
+
+(defn send-event [msg]
+  (@*event-sender* msg))
+
 (defn event-msg-handler [msg]
   (log/info "Event rcvd" (:event msg))
-  (chsk-send! [:dulciana.client.core/msg {:data "hello dere"}]))
+  (send-event [:dulciana.client.core/msg {:data "hello dere"}]))
 
-(let [{:keys [chsk ch-recv send-fn state]}
-      (sente/make-channel-socket-client! "/api/upnp/updates" {:type :auto :packer :edn})]
-  (def chsk chsk)
-  (def ch-chsk ch-recv)
-  (def chsk-send! send-fn)
-  (def chsk-state state)
-  (sente/start-client-chsk-router! ch-chsk event-msg-handler))
+(defn start-sente! []
+  (let [{:keys [chsk ch-recv send-fn state] :as s}
+        (sente/make-channel-socket-client! "/api/upnp/updates" {:type :auto :packer :edn})]
+    (sente/start-client-chsk-router! ch-recv event-msg-handler)
+    (reset! *event-channel* ch-recv)
+    (reset! *event-sender* send-fn)))
 
 (defn parse-edn [response]
   (into (sorted-map) (read-string response)))
@@ -41,12 +46,12 @@
   (rf/dispatch [event (parse-edn response)]))
 
 (defn run []
+  (start-sente!)
   (rf/dispatch-sync [:initialize-db])
   (ajax/GET "/api/upnp/devices" {:handler (partial dispatch-response :devices-received)})
   (ajax/GET "/api/upnp/services" {:handler (partial dispatch-response :services-received)})
   (ajax/GET "/api/upnp/announcements" {:handler (partial dispatch-response :announcements-received)})
   (reagent/render (views/main-view)
-                  (js/document.getElementById "app"))
-  (log/info "here we go 3"))
+                  (js/document.getElementById "app")))
 
 (run)
