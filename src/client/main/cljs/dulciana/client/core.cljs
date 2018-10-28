@@ -21,12 +21,17 @@
 (enable-console-print!)
 (devtools/install!)
 
+(defn event-msg-handler [msg]
+  (log/info "Event rcvd" (:event msg))
+  (chsk-send! [:dulciana.client.core/msg {:data "hello dere"}]))
+
 (let [{:keys [chsk ch-recv send-fn state]}
-      (sente/make-channel-socket! "/api/upnp/updates" {:type :auto})]
+      (sente/make-channel-socket-client! "/api/upnp/updates" {:type :auto :packer :edn})]
   (def chsk chsk)
   (def ch-chsk ch-recv)
   (def chsk-send! send-fn)
-  (def chsk-state state))
+  (def chsk-state state)
+  (sente/start-client-chsk-router! ch-chsk event-msg-handler))
 
 (defn parse-edn [response]
   (into (sorted-map) (read-string response)))
@@ -41,6 +46,7 @@
   (ajax/GET "/api/upnp/services" {:handler (partial dispatch-response :services-received)})
   (ajax/GET "/api/upnp/announcements" {:handler (partial dispatch-response :announcements-received)})
   (reagent/render (views/main-view)
-                  (js/document.getElementById "app")))
+                  (js/document.getElementById "app"))
+  (log/info "here we go 3"))
 
 (run)

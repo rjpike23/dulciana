@@ -9,6 +9,7 @@
   (:require [cljs.core.async :as async]
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
+            [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.description.core :as description]
@@ -30,19 +31,12 @@
 
 (sms/install)
 
-;; Websocket/Sente initialization:
-(let [packer :edn
-      {:keys [ch-recv send-fn ajax-post-fn ajax-get-or-ws-handshake-fn connected-uids]}
-      (sente-express/make-express-channel-socket-server! {:packer packer
-                                                         :user-id-fn (fn [ring-req] (aget (:body ring-req) "session" "uid"))})]
-  (def ajax-post ajax-post-fn)
-  (def ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
-  (def ch-chsk ch-recv)
-  (def chsk-send! send-fn)
-  (def connected-uids connected-uids))
-
+(defonce *event-channel* (atom nil))
+(defonce *event-sender* (atom nil))
+(defonce *event-connections* (atom nil))
 (defonce *http-server* (atom nil))
-(defonce *sente-router* (atom nil))
+(defonce *ws-server* (atom nil))
+(defonce *sente-chsk* (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -69,72 +63,93 @@
 (defn filter-pending [map]
   (into {} (filter (fn [[k v]] (not= (type v) Atom)) map)))
 
-(def app (express))
-(def ws-app (express-ws app))
+(defn start-sente! []
+  (let [{:keys [ch-recv send-fn connected-uids
+                ajax-get-or-ws-handshake-fn ajax-post-fn]
+         :as s}
+        (sente-express/make-express-channel-socket-server!
+         {:packer :edn
+          :user-id-fn (constantly "DLNA-DB-SERVICE")})]
+    (reset! *event-channel* ch-recv)
+    (reset! *event-sender* send-fn)
+    (reset! *event-connections* connected-uids)
+    s))
 
-(doto app
-  (.use (express-session #js {:secret "Dulciana-DLNA"
-                      :resave true
-                      :cookie {}
-                      :store (.MemoryStore express-session)
-                      :saveUninitialized true}))
-  (.use (.urlencoded body-parser
-                     #js {:extended false}))
-  (.use (cookie-parser "Dulciana-DLNA"))
-  (.use (csurf #js {:cookie false}))
-  (.use "/resources" (. express (static "target")))
-  (.get "/api/upnp/announcements"
-     (fn [req res]
-       (. res (set "Content-Type" "application/edn"))
-       (. res (send (pr-str @discovery/*announcements*)))))
-  (.get "/api/upnp/devices"
-     (fn [req res]
-       (. res (set "Content-Type" "application/edn"))
-       (. res (send (pr-str (filter-pending @description/*remote-devices*))))))
-  (.get "/api/upnp/services"
-     (fn [req res]
-       (. res (set "Content-Type" "application/edn"))
-       (. res (send (pr-str (filter-pending @description/*remote-services*))))))
-  (.get "/api/upnp/services/:svcid"
-     (fn [req res]
-       (. res (set "Content-Type" "application/edn"))
-       (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req)))))))))
-  (.ws "/api/upnp/updates"
-     (fn [ws req]
-       (ajax-get-or-ws-handshake req nil nil {:websocket? true
-                                              :websocket ws})))
-  (.get "/api/upnp/updates" ajax-get-or-ws-handshake)
-  (.post "/api/upnp/updates" ajax-post)
-  (.get "/upnp/devices/"
-     template-express-handler)
-  (.get "/upnp/device/:devid"
-     template-express-handler)
-  (.get "/upnp/device/:devid/service/:svcid"
-     template-express-handler)
-  (.get "/"
-     (fn [req res]
-       (. res (redirect "/upnp/devices")))))
+(defn start-express-server! [event-mgr]
+  (let [express-app (express)
+        express-ws-app (express-ws express-app)]
+    (doto express-app
+      (.use (express-session #js {:secret "Dulciana-DLNA"
+                                  :resave true
+                                  :cookie {}
+                                  :store (.MemoryStore express-session)
+                                  :saveUninitialized true}))
+      (.use (.urlencoded body-parser
+                         #js {:extended false}))
+      (.use (cookie-parser "Dulciana-DLNA"))
+      (.use (csurf #js {:cookie false}))
+      (.use "/resources" (. express (static "target")))
+      (.get "/api/upnp/announcements"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              (. res (send (pr-str @discovery/*announcements*)))))
+      (.get "/api/upnp/devices"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              (. res (send (pr-str (filter-pending @description/*remote-devices*))))))
+      (.get "/api/upnp/services"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              (. res (send (pr-str (filter-pending @description/*remote-services*))))))
+      (.get "/api/upnp/services/:svcid"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req)))))))))
+      (.ws "/api/upnp/updates"
+           (fn [ws req next]
+             ((:ajax-get-or-ws-handshake-fn event-mgr) req nil nil{:websocket? true
+                                                                :websocket ws})))
+      (.get "/api/upnp/updates"
+            (fn [req res]
+              (. res (set "Content-Type" "application/edn"))
+              ((:ajax-get-or-ws-handshake-fn event-mgr) req res)))
+      (.post "/api/upnp/updates" (:ajax-post-fn event-mgr))
+      (.get "/upnp/devices/"
+            template-express-handler)
+      (.get "/upnp/device/:devid"
+            template-express-handler)
+      (.get "/upnp/device/:devid/service/:svcid"
+            template-express-handler)
+      (.get "/"
+            (fn [req res]
+              (. res (redirect "/upnp/devices")))))
+    (.listen express-app 3000)
+    (reset! *http-server* express-app)
+    (reset! *ws-server* express-ws-app)))
+
+(defn sente-router [ch hndlr]
+  (events/channel-driver ch hndlr))
 
 (defn sente-event-handler [msg]
-  (log/info "Received WS msg!" msg))
+  (log/info "Received WS msg!" (:event msg)))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
 (defn setup []
   (try
     (upnp/start-upnp-services)
-    (reset! *http-server*
-            (doto (.createServer http #(app %1 %2))
-              (.listen 3000)))
-    (reset! *sente-router*
-            (sente/start-chsk-router! ch-chsk sente-event-handler))
+    (start-express-server! (start-sente!))
+    (sente-router @*event-channel* sente-event-handler)
     (catch :default e
       (log/error "Error while starting Dulciana." e))))
 
 (defn teardown []
-  (upnp/stop-upnp-services)
-  (when-let [stop-fn @*sente-router*] (stop-fn))
-  (.close @*http-server*))
+  (try
+    (upnp/stop-upnp-services)
+    (when @*ws-server* (.close @*ws-server*))
+    (when @*http-server* (.close @*http-server*))
+    (catch :default e
+      (log/error "Error shutting down Dulciana." e))))
 
 (defn fig-reload-hook []
   (teardown)
