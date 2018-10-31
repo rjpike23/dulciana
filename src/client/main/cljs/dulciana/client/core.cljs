@@ -27,9 +27,33 @@
 (defn send-event [msg]
   (@*event-sender* msg))
 
+(defn parse-edn [response]
+  (into (sorted-map) (read-string response)))
+
+(defn dispatch-response [event response]
+  (log/info "RESPONSE RCVD" event)
+  (rf/dispatch [event response]))
+
+(defmulti dispatch-event-msg first)
+
+(defmethod dispatch-event-msg :default
+  [{:as msg :keys [id event]}]
+  (log/info "No matching handler" msg))
+
+(defmethod dispatch-event-msg :dulciana.service/update-devices
+  [[id data]]
+  (dispatch-response :devices-received (:data data)))
+
+(defmethod dispatch-event-msg :dulciana.service/update-announcements
+  [[id data]]
+  (dispatch-response :announcements-received (:data data)))
+
+(defmethod dispatch-event-msg :dulciana.service/update-services
+  [[id data]]
+  (dispatch-response :services-received (:data data)))
+
 (defn event-msg-handler [msg]
-  (log/info "Event rcvd" (:event msg))
-  (send-event [:dulciana.client.core/msg {:data "hello dere"}]))
+  (dispatch-event-msg (:?data msg)))
 
 (defn start-sente! []
   (let [{:keys [chsk ch-recv send-fn state] :as s}
@@ -38,19 +62,12 @@
     (reset! *event-channel* ch-recv)
     (reset! *event-sender* send-fn)))
 
-(defn parse-edn [response]
-  (into (sorted-map) (read-string response)))
-
-(defn dispatch-response [event response]
-  (log/info "RESPONSE RCVD" event response)
-  (rf/dispatch [event (parse-edn response)]))
-
 (defn run []
   (start-sente!)
   (rf/dispatch-sync [:initialize-db])
-  (ajax/GET "/api/upnp/devices" {:handler (partial dispatch-response :devices-received)})
-  (ajax/GET "/api/upnp/services" {:handler (partial dispatch-response :services-received)})
-  (ajax/GET "/api/upnp/announcements" {:handler (partial dispatch-response :announcements-received)})
+  (ajax/GET "/api/upnp/devices" {:handler (comp (partial dispatch-response :devices-received) parse-edn)})
+  (ajax/GET "/api/upnp/services" {:handler (comp (partial dispatch-response :services-received) parse-edn)})
+  (ajax/GET "/api/upnp/announcements" {:handler (comp (partial dispatch-response :announcements-received) parse-edn)})
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 

@@ -122,15 +122,20 @@
       (.get "/"
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
-    (.listen express-app 3000)
-    (reset! *http-server* express-app)
+    (reset! *http-server* (.listen express-app 3000))
     (reset! *ws-server* express-ws-app)))
 
 (defn sente-router [ch hndlr]
   (events/channel-driver ch hndlr))
 
 (defn sente-event-handler [msg]
-  (log/info "Received WS msg!" (:event msg)))
+  (log/info "Received WS msg" (:event msg)))
+
+(defn send-event [msg]
+  (@*event-sender* "DLNA-DB-SERVICE" msg))
+
+(defn send-db-update [tag data]
+  (send-event [tag {:data data}]))
 
 ;;; Initializes network connections / routes etc. Called from both
 ;;; -main and the figwheel reload hook.
@@ -139,16 +144,32 @@
     (upnp/start-upnp-services)
     (start-express-server! (start-sente!))
     (sente-router @*event-channel* sente-event-handler)
+    (add-watch discovery/*announcements* :update
+               (fn [key atom old new]
+                 (send-db-update :dulciana.service/update-announcements new)))
+    (add-watch description/*remote-devices* :update
+               (fn [key atom old new]
+                 (send-db-update :dulciana.service/update-devices (filter-pending new))))
+    (add-watch description/*remote-services* :update
+               (fn [key atom old new]
+                 (send-db-update :dulciana.service/update-services (filter-pending new))))
     (catch :default e
       (log/error "Error while starting Dulciana." e))))
 
-(defn teardown []
-  (try
-    (upnp/stop-upnp-services)
-    (when @*ws-server* (.close @*ws-server*))
-    (when @*http-server* (.close @*http-server*))
-    (catch :default e
-      (log/error "Error shutting down Dulciana." e))))
+(defn teardown
+  ([err]
+   (println err)
+   (teardown))
+  ([]
+   (try
+     (remove-watch discovery/*announcements* :update)
+     (remove-watch description/*remote-devices* :update)
+     (remove-watch description/*remote-services* :update)
+     (upnp/stop-upnp-services)
+     (when @*http-server* (.close @*http-server*))
+     (when @*event-channel*) (async/close! @*event-channel*)
+     (catch :default e
+       (log/error "Error shutting down Dulciana." e)))))
 
 (defn fig-reload-hook []
   (teardown)
@@ -160,3 +181,4 @@
   (.on nodejs/process "uncaughtException" teardown))
 
 (set! *main-cli-fn* -main)
+

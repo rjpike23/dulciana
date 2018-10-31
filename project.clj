@@ -57,7 +57,7 @@
                                                "@pupeno/xmlhttprequest" "1.7.0"}}}
                        {:id "fig-client"
                         :source-paths ["src/client/main/cljs" "src/client/test/cljs"]
-                        :figwheel true
+                        :figwheel {:websocket-host :js-client-host}
                         :compiler {:main dulciana.client.core
                                    :output-dir "target/fig-client"
                                    :output-to "target/fig-client/dulciana_figwheel.js"

@@ -19,18 +19,20 @@
                         (nth partitions 0 [:div.col])
                         (nth partitions 1 [:div.col])
                         (nth partitions 2 [:div.col])])
-                     (partition-all 3 components)))))
+                     (partition-all 3 (remove nil? components))))))
 
 (defn device-card [device]
-  [:div.col-md
-   [:div.card {:key (-> device :device :UDN)}
-    [:button.card-title.btn.btn-primary
-     {:on-click #(.setToken routes/*history* (str "upnp/device/" (-> device :device :UDN)))}
-     (-> device :device :friendlyName)]
-    [:h6.card-subtitle (-> device :device :modelDescription)]
-    [:dl.card-body
-     [:dt "Manufacturer "] [:dd [:a {:href (-> device :device :manufacturerURL)} (-> device :device :manufacturer)]]
-     [:dt "Model "] [:dd (-> device :device :modelName)]]]])
+  (if (-> device :device :UDN)
+    [:div.col-md
+     [:div.card {:key (-> device :device :UDN)}
+      [:button.card-title.btn.btn-primary
+       {:on-click #(.setToken routes/*history* (str "upnp/device/" (-> device :device :UDN)))}
+       (-> device :device :friendlyName)]
+      [:h6.card-subtitle (-> device :device :modelDescription)]
+      [:dl.card-body
+       [:dt "Manufacturer "] [:dd [:a {:href (-> device :device :manufacturerURL)} (-> device :device :manufacturer)]]
+       [:dt "Model "] [:dd (-> device :device :modelName)]]]]
+    (log/info "Dev with no UDN" device)))
 
 (defn device-table-component [devs]
   (bootstrap-3by-table (mapv (fn [[key val]] (device-card val)) @devs)))
