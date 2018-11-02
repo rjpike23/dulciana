@@ -14,15 +14,16 @@
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/test.check "0.9.0"]
                  [org.clojure/data.xml "0.2.0-alpha5"]
-                 [binaryage/devtools "0.9.9"]
+                 [binaryage/devtools "0.9.10"]
                  [lein-cljsbuild "1.1.7"]
                  [cider/piggieback "0.3.6"]
                  [com.cemerick/url "0.1.1"]
                  [lein-figwheel "0.5.16"]
                  [figwheel-sidecar "0.5.16"]
                  [instaparse "1.4.8"]
-                 [reagent "0.8.0-alpha2"]
-                 [re-frame "0.10.3"]
+                 [reagent "0.8.1"]
+                 [re-frame "0.10.6"]
+                 [day8.re-frame/re-frame-10x "0.3.3"]
                  [secretary "1.2.3"]
                  [macchiato/hiccups "0.4.1"]
                  [cljs-ajax "0.6.0"]
@@ -62,11 +63,11 @@
                                    :output-dir "target/fig-client"
                                    :output-to "target/fig-client/dulciana_figwheel.js"
                                    :asset-path "/resources/fig-client"
+                                   :closure-defines {"re_frame.trace.trace_enabled_QMARK_" true}
+                                   :preloads [process.env day8.re-frame-10x.preload]
                                    :optimizations :none
                                    :source-map true
                                    :install-deps true
-                                   :npm-deps {:react "15.6.0"
-                                              :websocket "1.0.28"
-                                              :react-dom "15.6.0"}}}]}
+                                   :npm-deps {:websocket "1.0.28"}}}]}
   :figwheel {}
   :repl-options {:nrepl-middleware [cider.piggieback/wrap-cljs-repl]})
