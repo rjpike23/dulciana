@@ -32,6 +32,11 @@
              [:ui :service :selected-id] (str devid "::" svcid))))
 
 (rf/reg-event-db
+ :invoke-action
+ (fn [db [_ action]]
+   (assoc-in db [:ui :service :selected-action] action)))
+
+(rf/reg-event-db
  :devices-received
  (fn [db [_ devs]]
    (log/info ":devices-received")

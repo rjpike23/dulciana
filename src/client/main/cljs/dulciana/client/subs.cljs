@@ -76,3 +76,8 @@
  (fn [[svc-id services]]
    (log/info ":selected-service sub" svc-id services)
    (services svc-id)))
+
+(rf/reg-sub
+ :selected-action
+ (fn [db _]
+   (-> db :ui :service :selected-action)))

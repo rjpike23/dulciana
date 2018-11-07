@@ -7,7 +7,8 @@
 (ns dulciana.client.routes
   (:require [re-frame.core :as rf]
             [secretary.core :as secretary :refer-macros [defroute]]
-            [goog.events :as goog-events])
+            [goog.events :as goog-events]
+            [taoensso.timbre :as log :include-macros true])
   (:import [goog History]
            [goog.history Html5History EventType]))
 
@@ -20,3 +21,4 @@
 (defroute "/upnp/devices" [] (rf/dispatch [:view-devices]))
 (defroute "/upnp/device/:devid/service/:svcid" [devid svcid] (rf/dispatch [:view-service devid svcid]))
 (defroute "/upnp/device/:id" [id] (rf/dispatch [:view-device id]))
+

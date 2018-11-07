@@ -24,6 +24,7 @@
                  [reagent "0.8.1"]
                  [re-frame "0.10.6"]
                  [day8.re-frame/re-frame-10x "0.3.3"]
+                 [org.roman01la/cljss "1.6.3"]
                  [secretary "1.2.3"]
                  [macchiato/hiccups "0.4.1"]
                  [cljs-ajax "0.6.0"]
@@ -58,7 +59,8 @@
                                                "@pupeno/xmlhttprequest" "1.7.0"}}}
                        {:id "fig-client"
                         :source-paths ["src/client/main/cljs" "src/client/test/cljs"]
-                        :figwheel {:websocket-host :js-client-host}
+                        :figwheel {:on-jsload "dulciana.client.core/fig-reload-hook"
+                                   :websocket-host :js-client-host}
                         :compiler {:main dulciana.client.core
                                    :output-dir "target/fig-client"
                                    :output-to "target/fig-client/dulciana_figwheel.js"

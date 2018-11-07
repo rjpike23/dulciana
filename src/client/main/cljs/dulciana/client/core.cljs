@@ -7,10 +7,12 @@
 
 (ns dulciana.client.core
   (:require [cljs.reader :refer [read-string]]
+            [cljss.core :as css :include-macros true]
             [ajax.core :as ajax]
             [devtools.core :as devtools]
             [reagent.core :as reagent]
             [re-frame.core :as rf]
+            [secretary.core :as secretary :refer-macros [defroute]]
             [taoensso.sente :as sente]
             [taoensso.timbre :as log :include-macros true]
             [dulciana.client.events :as events]
@@ -64,10 +66,16 @@
 
 (defn run []
   (start-sente!)
+  (secretary/dispatch! window.location.pathname)
   (rf/dispatch-sync [:initialize-db])
   (ajax/GET "/api/upnp/devices" {:handler (comp (partial dispatch-response :devices-received) parse-edn)})
   (ajax/GET "/api/upnp/services" {:handler (comp (partial dispatch-response :services-received) parse-edn)})
   (ajax/GET "/api/upnp/announcements" {:handler (comp (partial dispatch-response :announcements-received) parse-edn)})
+  (reagent/render (views/main-view)
+                  (js/document.getElementById "app")))
+
+(defn fig-reload-hook []
+  (css/remove-styles!)
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 
