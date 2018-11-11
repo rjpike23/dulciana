@@ -39,7 +39,7 @@
 (defn ssdp-devices-page []
   [:div
    [:nav.navbar.bg-primary
-    [:div.navbar-brand.text-light "Dulciana"]
+    [:div.navbar-brand.text-light "Dulciana / UPnP Browser"]
     [:ol.breadcrumb
      [:li.breadcrumb-item.active "All Devices"]]]
    [device-table-component (rf/subscribe [:devices])]])
@@ -77,7 +77,7 @@
   (let [dev (rf/subscribe [:selected-device])]
     [:div
      [:nav.navbar.bg-primary
-      [:div.navbar-brand.text-light "Dulciana"]
+      [:div.navbar-brand.text-light "Dulciana / UPnP Browser"]
       [:ol.breadcrumb
        [:li.breadcrumb-item [:a {:href "#"
                                  :on-click (fn [evt]
@@ -151,7 +151,7 @@
         svc-id (rf/subscribe [:selected-service-id])]
     [:div
      [:nav.navbar.bg-primary
-      [:div.navbar-brand.text-light "Dulciana"]
+      [:div.navbar-brand.text-light "Dulciana / UPnP Browser"]
       [:ol.breadcrumb
        [:li.breadcrumb-item [:a {:href "#"
                                  :on-click (fn [evt]

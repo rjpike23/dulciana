@@ -5,14 +5,22 @@
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 (ns dulciana.client.events
-  (:require [re-frame.core :as rf]
+  (:require [ajax.edn]
+            [re-frame.core :as rf]
+            [day8.re-frame.http-fx]
             [taoensso.timbre :as log :include-macros true]
             [dulciana.client.db :as db]))
 
 (rf/reg-event-fx
  :initialize-db
  (fn [{:keys [db]}]
-   {:db (merge db/initial-state db)}))
+   {:db (merge db/initial-state db)
+    :dispatch-n (list [:request-devices] [:request-services] [:request-announcements])}))
+
+(rf/reg-event-fx
+ :log
+ (fn [_ [_ resp]]
+   (console.log "elm" resp)))
 
 (rf/reg-event-db
  :view-devices
@@ -35,6 +43,33 @@
  :invoke-action
  (fn [db [_ action]]
    (assoc-in db [:ui :service :selected-action] action)))
+
+(rf/reg-event-fx
+ :request-devices
+ (fn [_ _]
+   {:http-xhrio {:method :get
+                 :uri "/api/upnp/devices"
+                 :response-format (ajax.edn/edn-response-format)
+                 :on-success [:devices-received]
+                 :on-failure [:log]}}))
+
+(rf/reg-event-fx
+ :request-services
+ (fn [_ _]
+   {:http-xhrio {:method :get
+                 :uri "/api/upnp/services"
+                 :response-format (ajax.edn/edn-response-format)
+                 :on-success [:services-received]
+                 :on-failure [:log]}}))
+
+(rf/reg-event-fx
+ :request-announcements
+ (fn [_ _]
+   {:http-xhrio {:method :get
+                 :uri "/api/upnp/announcements"
+                 :response-format (ajax.edn/edn-response-format)
+                 :on-success [:announcements-received]
+                 :on-failure [:log]}}))
 
 (rf/reg-event-db
  :devices-received

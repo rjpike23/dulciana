@@ -23,11 +23,12 @@
                  [instaparse "1.4.8"]
                  [reagent "0.8.1"]
                  [re-frame "0.10.6"]
+                 [day8.re-frame/http-fx "0.1.6"]
                  [day8.re-frame/re-frame-10x "0.3.3"]
                  [org.roman01la/cljss "1.6.3"]
                  [secretary "1.2.3"]
                  [macchiato/hiccups "0.4.1"]
-                 [cljs-ajax "0.6.0"]
+                 [cljs-ajax "0.7.5"]
                  [funcool/tubax "0.2.0"]
                  [com.taoensso/sente "1.13.1"]
                  [com.taoensso/timbre "4.10.0"]]
@@ -56,7 +57,7 @@
                                                :ws "3.2.0"
                                                :sax "1.2.2"
                                                :xmldom "0.1.27"
-                                               "@pupeno/xmlhttprequest" "1.7.0"}}}
+                                               :xmlhttprequest "1.8.0"}}}
                        {:id "fig-client"
                         :source-paths ["src/client/main/cljs" "src/client/test/cljs"]
                         :figwheel {:on-jsload "dulciana.client.core/fig-reload-hook"

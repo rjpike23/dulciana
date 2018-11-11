@@ -29,18 +29,13 @@
 (defn send-event [msg]
   (@*event-sender* msg))
 
-(defn parse-edn [response]
-  (into (sorted-map) (read-string response)))
-
 (defn dispatch-response [event response]
-  (log/info "RESPONSE RCVD" event)
   (rf/dispatch [event response]))
 
 (defmulti dispatch-event-msg first)
 
 (defmethod dispatch-event-msg :default
-  [{:as msg :keys [id event]}]
-  (log/info "No matching handler" msg))
+  [{:as msg :keys [id event]}]) ;; Do nothing...
 
 (defmethod dispatch-event-msg :dulciana.service/update-devices
   [[id data]]
@@ -68,9 +63,6 @@
   (start-sente!)
   (secretary/dispatch! window.location.pathname)
   (rf/dispatch-sync [:initialize-db])
-  (ajax/GET "/api/upnp/devices" {:handler (comp (partial dispatch-response :devices-received) parse-edn)})
-  (ajax/GET "/api/upnp/services" {:handler (comp (partial dispatch-response :services-received) parse-edn)})
-  (ajax/GET "/api/upnp/announcements" {:handler (comp (partial dispatch-response :announcements-received) parse-edn)})
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 
