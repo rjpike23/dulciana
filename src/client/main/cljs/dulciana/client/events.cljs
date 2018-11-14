@@ -9,7 +9,18 @@
             [re-frame.core :as rf]
             [day8.re-frame.http-fx]
             [taoensso.timbre :as log :include-macros true]
-            [dulciana.client.db :as db]))
+            [dulciana.client.db :as db]
+            [dulciana.client.ws :as ws]))
+
+(rf/reg-fx
+ :send-ws-msg
+ (fn [fx-arg]
+   (if (:on-response fx-arg)
+     (ws/send-event (:msg fx-arg)
+                    (or (:timeout fx-arg) 3000)
+                    (fn [response]
+                      (rf/dispatch (:on-response fx-arg))))
+     (ws/send-event (:msg fx-arg)))))
 
 (rf/reg-event-fx
  :initialize-db
