@@ -81,3 +81,23 @@
  :selected-action
  (fn [db _]
    (-> db :ui :service :selected-action)))
+
+(rf/reg-sub
+ :action-form-values
+ (fn [db _]
+   (-> db :ui :forms :invoke-action)))
+
+(rf/reg-sub
+ :default-action-form
+ (fn [_ _]
+   [(rf/subscribe [:selected-action])])
+ (fn [[action]]
+   (merge) (into {} (map (fn [v] [(:name v) ""]) (:argumentList action)))))
+
+(rf/reg-sub
+ :invoke-action-form
+ (fn [db _]
+   [(rf/subscribe [:default-action-form])
+    (rf/subscribe [:action-form-values]) {}])
+ (fn [[default current-vals]]
+   (merge default current-vals)))

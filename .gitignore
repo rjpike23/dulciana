@@ -4,4 +4,5 @@ package-lock.json
 target/
 .nrepl-port
 figwheel_server.log
-*~
+.rebel_readline_history
+

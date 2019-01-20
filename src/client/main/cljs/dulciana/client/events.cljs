@@ -31,7 +31,7 @@
 (rf/reg-event-fx
  :log
  (fn [_ [_ resp]]
-   (console.log "elm" resp)))
+   (console.log "LOG-EVT" resp)))
 
 (rf/reg-event-db
  :view-devices
@@ -51,9 +51,11 @@
              [:ui :service :selected-id] (str devid "::" svcid))))
 
 (rf/reg-event-db
- :invoke-action
+ :select-action
  (fn [db [_ action]]
-   (assoc-in db [:ui :service :selected-action] action)))
+   (-> db
+       (assoc-in [:ui :service :selected-action] action)
+       (assoc-in [:ui :forms :invoke-action] {}))))
 
 (rf/reg-event-fx
  :request-devices
@@ -99,3 +101,21 @@
  (fn [db [_ announcements]]
    (log/info ":announcements-received")
    (assoc-in db [:remote :announcements] announcements)))
+
+(rf/reg-event-db
+ :update-form
+ (fn [db [_ form-path values]]
+   (update-in db form-path (fn [old] (merge old values)))))
+
+(rf/reg-event-fx
+ :invoke-action
+ (fn [cofx _]
+   (let [selected-device (-> (:db cofx) :ui :device :selected-id)
+         selected-service (-> (:db cofx) :ui :service :selected-id) 
+         selected-action (-> (:db cofx) :ui :service :selected-action)
+         form-values (-> (:db cofx) :ui :forms :invoke-action)]
+     {:send-ws-msg {:msg [:dulciana/invoke-action
+                          {:data {:device selected-device
+                                  :service selected-service
+                                  :action (:name selected-action)
+                                  :form form-values}}]}})))

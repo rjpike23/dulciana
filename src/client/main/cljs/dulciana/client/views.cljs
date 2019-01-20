@@ -104,29 +104,35 @@
     [:div.card-title [:h5 "State Variables"]]
     [:div.card-body (responsive-table (map service-state-variable-card (:serviceStateTable @svc)))]]])
 
-(defn action-inputs-form [action]
+(defn action-inputs-form [action form]
   [:form
    (for [in-arg (filter (fn [arg] (= "in" (:direction arg)))
                         (:argumentList action))]
-     [:div.form-group
+     [:div.form-group {:key (:name in-arg)}
       [:label {:for (:name in-arg)} (:name in-arg)]
-      [:input.form-control {:id (:name in-arg)}]])])
+      [:input.form-control {:id (:name in-arg)
+                            :value (form (:name in-arg))
+                            :onChange (fn [arg] (rf/dispatch [:update-form
+                                                              [:ui :forms :invoke-action]
+                                                              {(:name in-arg) (.-value (.-target arg))}]))}]])])
 
 (defn invoke-action-dialog []
-  (let [action (rf/subscribe [:selected-action])]
+  (let [action (rf/subscribe [:selected-action])
+        form (rf/subscribe [:invoke-action-form])]
+    (log/info "action-dlg" action form)
     [:div.modal.fade {:id "launchDialog"}
      [:div.modal-dialog
       [:div.modal-content
        [:div.modal-header
         [:h5.modal-title "Invoke Action"]
         [:button.close {:type "button" :data-dismiss "modal"}
-         [:span "\u00D7"]]]
+         [:span "\u00D7"]]] ;; x (close) icon
        [:div.modal-body
         [:h6.modal-title "Inputs"]
-        [action-inputs-form @action]]
+        [action-inputs-form @action @form]]
        [:div.modal-footer
         [:button.btn.btn-secondary {:data-dismiss "modal"} "Cancel"]
-        [:button.btn.btn-primary "Submit"]]]]]))
+        [:button.btn.btn-primary {:onClick (fn [] (rf/dispatch [:invoke-action ]))} "Submit"]]]]]))
 
 (defn service-actions-card [action]
   [:div.col-12.col-sm-6.col-md-4.col-lg-3
@@ -135,7 +141,8 @@
     [:div.card-body
      [:button.btn.btn-primary {:data-toggle "modal"
                                :data-target "#launchDialog"
-                               :on-click (fn [] (rf/dispatch [:invoke-action action]))} "Invoke"]
+                               :on-click (fn [] (rf/dispatch [:select-action action]))}
+      "Invoke"]
      [:dt "Arguments"]
      [:dd [:ul (for [arg (:argumentList action)]
                  [:li {:key (:name arg)} (:name arg)])]]]]])
