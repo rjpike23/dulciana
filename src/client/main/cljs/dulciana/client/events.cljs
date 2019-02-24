@@ -19,7 +19,7 @@
      (ws/send-event (:msg fx-arg)
                     (or (:timeout fx-arg) 3000)
                     (fn [response]
-                      (rf/dispatch (:on-response fx-arg))))
+                      (rf/dispatch [(:on-response fx-arg) response])))
      (ws/send-event (:msg fx-arg)))))
 
 (rf/reg-event-fx
@@ -103,6 +103,11 @@
    (assoc-in db [:remote :announcements] announcements)))
 
 (rf/reg-event-db
+ :action-response-received
+ (fn [db [_ dev-id svc-id action msg]]
+   (assoc-in db [:remote :actions dev-id svc-id action] msg)))
+
+(rf/reg-event-db
  :update-form
  (fn [db [_ form-path values]]
    (update-in db form-path (fn [old] (merge old values)))))
@@ -118,4 +123,5 @@
                           {:data {:device selected-device
                                   :service selected-service
                                   :action (:name selected-action)
-                                  :form form-values}}]}})))
+                                  :form form-values}}]
+                    :on-response :log}})))

@@ -47,6 +47,16 @@
 (defn find-scpd [svc-usn]
   (@*remote-services* svc-usn))
 
+(defn get-control-url [svc-usn]
+  (let [ann (@discovery/*announcements* (discovery/get-dev-id svc-usn))
+        svc (find-service (discovery/get-dev-id svc-usn) (discovery/get-svc-id svc-usn))]
+     (url/resolve (-> ann :message :headers :location) (:controlURL svc))))
+
+(defn get-event-url [svc-usn]
+  (let [ann (@discovery/*announcements* (discovery/get-dev-id svc-usn))
+        scpd (find-scpd svc-usn)]
+    (url/resolve (-> ann :message :headers :location) (:eventSubURL scpd))))
+
 ;;; HTTP methods for sending requests for descriptors / SOAP requests below:
 (defn request-device-descriptor
   "Sends HTTP request to get the descriptor for the device specified in the

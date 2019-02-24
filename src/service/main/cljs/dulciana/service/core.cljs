@@ -12,6 +12,7 @@
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.upnp.core :as upnp]
+            [dulciana.service.upnp.control.core :as control]
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.discovery.core :as discovery]
             [taoensso.sente :as sente]
@@ -135,7 +136,21 @@
   (events/channel-driver ch hndlr))
 
 (defn sente-event-handler [msg]
-  (log/info "Received WS msg" (:event msg)))
+  (log/info "Received WS msg" (:event msg))
+  (let [[evt-type args] (:event msg)]
+    (if (= evt-type :dulciana/invoke-action)
+      (let [{:keys [device service action form]} (:data args)]
+        (async/take! (control/send-control-request (description/get-control-url service)
+                                                   (discovery/get-svc-id service)
+                                                   action
+                                                   form)
+                     (fn [response]
+                       (log/info response)
+                       (when (:?reply-fn msg)
+                         ((:?reply-fn msg) {:device device
+                                            :service service
+                                            :action action
+                                            :response response}))))))))
 
 (defn send-event [msg]
   (@*event-sender* "DLNA-DB-SERVICE" msg))

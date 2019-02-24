@@ -53,12 +53,13 @@
 (defn send-http-request
   "Retuns a channel."
   ([method url-string headers opts]
+   (send-http-request method url-string headers nil opts))
+  ([method url-string headers body opts]
    (let [url (url/URL. url-string)]
      (send-http-request method
                         (.-hostname url) (.-port url) (str (.-pathname url) (.-search url))
-                        headers nil opts)))
+                        headers body opts)))
   ([method host port path headers body opts]
-   (log/debug "sending http request" method host port path)
    (let [options {:hostname host
                   :port port
                   :path path

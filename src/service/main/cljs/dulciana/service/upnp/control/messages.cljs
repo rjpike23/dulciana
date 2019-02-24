@@ -4,7 +4,27 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-(ns dulciana.service.upnp.control.messages)
+(ns dulciana.service.upnp.control.messages
+  (:require [taoensso.timbre :as log :include-macros true]
+            [tubax.core :as xml]
+            [tubax.helpers :as xml-util]))
+
+(defn control-response-parse
+  ""
+  [http-msg]
+  (try
+    (if (not (= (-> http-msg :message :status-code) 200))
+      http-msg
+      (xml/xml->clj (-> http-msg :message :body)))
+    (catch :default e
+      (log/error e "Unexpected error parsing control response message" http-msg))))
+
+(defn analyze-control-response
+  ""
+  [resp]
+  (log/info "Analyzing" resp)
+  (into {} (map (fn [elt] [(:tag elt) (xml-util/text elt)])
+                (:content (first (:content (first (:content resp))))))))
 
 (defn emit-prop-val-xml [[n v]]
   (str "<" (name n) ">" v "</" (name n) ">"))
