@@ -104,8 +104,8 @@
 
 (rf/reg-event-db
  :action-response-received
- (fn [db [_ dev-id svc-id action msg]]
-   (assoc-in db [:remote :actions dev-id svc-id action] msg)))
+ (fn [db [_ {:keys [device service action response]}]]
+   (assoc-in db [:remote :actions device service action] response)))
 
 (rf/reg-event-db
  :update-form
@@ -124,4 +124,4 @@
                                   :service selected-service
                                   :action (:name selected-action)
                                   :form form-values}}]
-                    :on-response :log}})))
+                    :on-response :action-response-received}})))

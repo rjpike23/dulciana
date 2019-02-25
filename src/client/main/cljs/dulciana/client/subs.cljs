@@ -92,7 +92,9 @@
  (fn [_ _]
    [(rf/subscribe [:selected-action])])
  (fn [[action]]
-   (merge) (into {} (map (fn [v] [(:name v) ""]) (:argumentList action)))))
+   (into {} (map (fn [v] [(keyword (:name v)) ""])
+                 (filter (fn [arg] (= "in" (:direction arg)))
+                         (:argumentList action))))))
 
 (rf/reg-sub
  :invoke-action-form
@@ -101,3 +103,21 @@
     (rf/subscribe [:action-form-values]) {}])
  (fn [[default current-vals]]
    (merge default current-vals)))
+
+(rf/reg-sub
+ :action-responses
+ (fn [db _]
+   (-> db :remote :actions)))
+
+(rf/reg-sub
+ :action-response
+ (fn [_ _]
+   [(rf/subscribe [:action-responses])
+    (rf/subscribe [:selected-device-id])
+    (rf/subscribe [:selected-service-id])
+    (rf/subscribe [:selected-action])])
+ (fn [[responses dev svc action]]
+   (console.log "action-response" responses dev svc action)
+   (if (and responses dev svc action)
+     (get-in responses [dev svc (:name action)])
+     {})))

@@ -49,7 +49,7 @@
    [:div.card {:key (:serviceId svc)}
     [:button.card-title.btn.btn-primary
      {:on-click #(.setToken routes/*history* (str "upnp/device/" (:UDN device)
-                                                              "/service/" (:serviceId svc)))}
+                                                  "/service/" (:serviceId svc)))}
      (:serviceId svc)]
     [:dl.card-body
      [:dt "ID"] [:dd (:serviceId svc)]
@@ -104,22 +104,23 @@
     [:div.card-title [:h5 "State Variables"]]
     [:div.card-body (responsive-table (map service-state-variable-card (:serviceStateTable @svc)))]]])
 
-(defn action-inputs-form [action form]
+(defn action-form [action form direction]
   [:form
-   (for [in-arg (filter (fn [arg] (= "in" (:direction arg)))
+   (for [in-arg (filter (fn [arg] (= direction (:direction arg)))
                         (:argumentList action))]
      [:div.form-group {:key (:name in-arg)}
       [:label {:for (:name in-arg)} (:name in-arg)]
       [:input.form-control {:id (:name in-arg)
-                            :value (form (:name in-arg))
+                            :value (and form (form (keyword (:name in-arg))))
                             :onChange (fn [arg] (rf/dispatch [:update-form
                                                               [:ui :forms :invoke-action]
-                                                              {(:name in-arg) (.-value (.-target arg))}]))}]])])
+                                                              {(keyword (:name in-arg)) (.-value (.-target arg))}]))}]])])
 
 (defn invoke-action-dialog []
   (let [action (rf/subscribe [:selected-action])
-        form (rf/subscribe [:invoke-action-form])]
-    (log/info "action-dlg" action form)
+        form (rf/subscribe [:invoke-action-form])
+        response (rf/subscribe [:action-response])]
+    (console.log "actions-dlg" @action @form @response)
     [:div.modal.fade {:id "launchDialog"}
      [:div.modal-dialog
       [:div.modal-content
@@ -129,7 +130,10 @@
          [:span "\u00D7"]]] ;; x (close) icon
        [:div.modal-body
         [:h6.modal-title "Inputs"]
-        [action-inputs-form @action @form]]
+        [action-form @action @form "in"]]
+       [:div.modal-body
+        [:h6.modal-title "Outputs"]
+        [action-form @action @response "out"]]
        [:div.modal-footer
         [:button.btn.btn-secondary {:data-dismiss "modal"} "Cancel"]
         [:button.btn.btn-primary {:onClick (fn [] (rf/dispatch [:invoke-action ]))} "Submit"]]]]]))
