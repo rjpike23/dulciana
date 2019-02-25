@@ -32,6 +32,7 @@
 
 (defn fig-reload-hook []
   (css/remove-styles!)
+  (secretary/dispatch! window.location.pathname)
   (reagent/render (views/main-view)
                   (js/document.getElementById "app")))
 

@@ -74,7 +74,6 @@
    [(rf/subscribe [:selected-service-id])
     (rf/subscribe [:services])])
  (fn [[svc-id services]]
-   (log/info ":selected-service sub" svc-id services)
    (services svc-id)))
 
 (rf/reg-sub
@@ -117,7 +116,6 @@
     (rf/subscribe [:selected-service-id])
     (rf/subscribe [:selected-action])])
  (fn [[responses dev svc action]]
-   (console.log "action-response" responses dev svc action)
-   (if (and responses dev svc action)
+    (if (and responses dev svc action)
      (get-in responses [dev svc (:name action)])
      {})))

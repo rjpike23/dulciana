@@ -120,8 +120,7 @@
   (let [action (rf/subscribe [:selected-action])
         form (rf/subscribe [:invoke-action-form])
         response (rf/subscribe [:action-response])]
-    (console.log "actions-dlg" @action @form @response)
-    [:div.modal.fade {:id "launchDialog"}
+     [:div.modal.fade {:id "launchDialog"}
      [:div.modal-dialog
       [:div.modal-content
        [:div.modal-header

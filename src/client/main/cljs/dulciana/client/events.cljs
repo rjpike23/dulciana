@@ -41,14 +41,17 @@
 (rf/reg-event-db
  :view-device
  (fn [db [_ devid]]
-   (assoc-in (assoc-in db [:ui :active-view] :device)
-             [:ui :device :selected-id] devid)))
+   (-> db
+       (assoc-in [:ui :active-view] :device)
+       (assoc-in [:ui :device :selected-id] devid))))
 
 (rf/reg-event-db
  :view-service
  (fn [db [_ devid svcid]]
-   (assoc-in (assoc-in db [:ui :active-view] :service)
-             [:ui :service :selected-id] (str devid "::" svcid))))
+   (-> db
+       (assoc-in [:ui :active-view] :service)
+       (assoc-in [:ui :device :selected-id] devid)
+       (assoc-in [:ui :service :selected-id] (str devid "::" svcid)))))
 
 (rf/reg-event-db
  :select-action
@@ -87,19 +90,16 @@
 (rf/reg-event-db
  :devices-received
  (fn [db [_ devs]]
-   (log/info ":devices-received")
    (assoc-in db [:remote :devices] devs)))
 
 (rf/reg-event-db
  :services-received
  (fn [db [_ svcs]]
-   (log/info ":services-received")
    (assoc-in db [:remote :services] svcs)))
 
 (rf/reg-event-db
  :announcements-received
  (fn [db [_ announcements]]
-   (log/info ":announcements-received")
    (assoc-in db [:remote :announcements] announcements)))
 
 (rf/reg-event-db
