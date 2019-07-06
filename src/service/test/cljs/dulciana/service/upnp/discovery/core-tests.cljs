@@ -52,12 +52,13 @@
   {"uuid:abc::123" *expired-announcement*
    "uuid:abd::124" *valid-announcement*})
 
-(defn create-sock-mock [bind-fn add-m-fn send-fn close-fn]
+(defn create-sock-mock [bind-fn add-m-fn send-fn close-fn address-fn]
   (let [sock-mock (js/Object.create (node-events/EventEmitter.))]
     (set! (.-bind sock-mock) bind-fn)
     (set! (.-addMembership sock-mock) add-m-fn)
     (set! (.-send sock-mock) send-fn)
     (set! (.-close sock-mock) close-fn)
+    (set! (.-address sock-mock) address-fn)
     sock-mock))
 
 (deftest remove-expired
@@ -71,7 +72,7 @@
          (discovery/remove-announcements (atom *announcements*) *expired-announcement*))))
 
 (deftest start-listener-test
-  (let [iface {:family "IPv4" :address "1.2.3.4"}
+  (let [iface {:family "IPv4" :address "1.2.3.4" :port 123}
         calls (atom #{})
         bind-fn (fn [& args]
                   (swap! calls conj :bind)
@@ -86,7 +87,10 @@
                    nil)
         close-fun (fn [& args]
                     (swap! calls conj :close))
-        sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
+        address-fn (fn [& args]
+                     (swap! calls conj :address)
+                     iface)
+        sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun address-fn)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
       (let [result (discovery/start-listener [:em0 iface])]
         (.emit sock-mock "listening")
@@ -100,7 +104,7 @@
                  (is (= (:socket result) sock-mock))
                  (is (= #{:listening :error :message :close} (set (keys (:channels result)))))
                  (is (every? identity (vals (:channels result))))
-                 (is (= #{:bind :addMembership :send} @calls))
+                 (is (= #{:bind :addMembership :send :address} @calls))
                  (done)))))))
 
 (deftest start-listener-err-test
@@ -119,7 +123,10 @@
                     (swap! calls conj :close)
                     (this-as this
                       (.emit this "close")))
-        sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun)]
+        address-fn (fn [& args]
+                     (swap! calls conj :address)
+                     iface)
+        sock-mock (create-sock-mock bind-fn add-m-fun send-fun close-fun address-fn)]
     (with-redefs [node-dgram/createSocket (constantly sock-mock)]
       (let [result (discovery/start-listener [:em0 iface])]
         (.emit sock-mock "error" (js/Error. "Testing"))
@@ -129,3 +136,39 @@
                    (is (= nil m))
                    (is (= #{:bind :close} @calls)))
                  (done)))))))
+
+(deftest create-root-device-announcements-test
+  (let [dd (discovery/map->device
+            {:udn "uuid:test-device-uuid"
+             :device-type "test-device-type"
+             :version "1.0"
+             :device-list (list (discovery/map->device {:udn "uuid:test-embedded-device-uuid"
+                                                          :device-type "test-embedded-device-type"
+                                                          :version "2.0"
+                                                          :service-list (list (discovery/map->service {:service-type "test-service-type-0"}))}))
+             :service-list (list (discovery/map->service {:service-type "test-service-type-1"})
+                                 (discovery/map->service {:service-type "test-service-type-2"}))})
+        ann (discovery/create-root-device-announcements :notification-type dd)]
+    (is (= 8 (count ann)))
+    (is (every? #(= (:type %) :notification-type) ann))
+    (is (some #(= (:nt %) "upnp:rootdevice") ann))
+    (is (some #(= (:nt %) "uuid:test-device-uuid") ann))
+    (is (some #(= (:nt %) "test-device-type:1.0") ann))
+    (is (some #(= (:nt %) "uuid:test-embedded-device-uuid") ann))
+    (is (some #(= (:nt %) "test-embedded-device-type:2.0") ann))
+    (is (some #(= (:nt %) "test-service-type-0") ann))
+    (is (some #(= (:nt %) "test-service-type-1") ann))
+    (is (some #(= (:nt %) "test-service-type-2") ann))
+    (is (some #(= (:usn %) "uuid:test-device-uuid::upnp:rootdevice") ann))
+    (is (some #(= (:usn %) "uuid:test-device-uuid") ann))
+    (is (some #(= (:usn %) "uuid:test-device-uuid::test-device-type:1.0") ann))
+    (is (some #(= (:usn %) "uuid:test-embedded-device-uuid") ann))
+    (is (some #(= (:usn %) "uuid:test-embedded-device-uuid::test-embedded-device-type:2.0") ann))
+    (is (some #(= (:usn %) "uuid:test-embedded-device-uuid::test-service-type-0") ann))
+    (is (some #(= (:usn %) "uuid:test-device-uuid::test-service-type-1") ann))
+    (is (some #(= (:usn %) "uuid:test-device-uuid::test-service-type-2") ann))
+    (is (every? #(= (:location %) "/upnp/devices/test-device-uuid/devDesc.xml") ann))))
+
+(deftest create-root-device-announcements-nil-test
+  (let [ann (discovery/create-root-device-announcements :notify nil)]
+    (is (nil? ann))))

@@ -18,8 +18,6 @@
 
 (defonce *upnp-http-server* (atom {}))
 
-(defonce *local-devices* (atom {}))
-
 (def *upnp-app* (express))
 
 (. *upnp-app* (get "/upnp/devices/:devid/devdesc.xml" (fn [req res]
@@ -45,12 +43,13 @@
                       (. res (send "Thanks")))))
  
 (defn register-device [device-descriptor]
-  (when (@*local-devices* (:UDN device-descriptor))
-    (swap! *local-devices* assoc (:UDN device-descriptor) device-descriptor)
-    (discovery/queue-device-announcements device-descriptor)))
+  (swap! discovery/*local-devices* assoc (:udn device-descriptor) device-descriptor)
+  (discovery/queue-device-announcements :notify device-descriptor nil))
 
 (defn deregister-devices [devid]
-  (swap! *local-devices* dissoc devid))
+  (when-let [device (@description/*local-devices* devid)]
+    (swap! description/*local-devices* dissoc devid)
+    (discovery/queue-device-announcements :goodbye device nil)))
 
 (defn start-upnp-services []
   (discovery/start-listeners)

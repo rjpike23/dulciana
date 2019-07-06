@@ -16,6 +16,61 @@
             [dulciana.service.parser :as parser]
             [dulciana.service.net :as net]))
 
+(defrecord argument
+    [direction
+     name
+     retval
+     related-state-variable])
+
+(defrecord action
+    [argument-list
+     name])
+
+(defrecord allowed-value-range
+    [maximum
+     minimum
+     step])
+
+(defrecord service-state-variable
+    [allowed-value-list
+     allowed-value-range
+     data-type
+     default-value
+     multicast
+     name
+     send-events])
+
+(defrecord service
+    [action-list
+     service-state-table
+     service-type])
+
+(defrecord icon
+    [mime-type
+     depth
+     height
+     width
+     url])
+
+(defrecord device
+    [boot-id
+     config-id
+     device-list
+     device-type
+     friendly-name
+     icon-list
+     manufacturer
+     manufacturer-url
+     model-description
+     model-name
+     model-url
+     presentation-url
+     serial-number
+     service-list
+     udn
+     upc
+     version])
+
 ;;; Define SSDP protocol networking constants:
 (def *ssdp-mcast-addresses* {"IPv4" "239.255.255.250"
                              "IPv6" "ff0e::c"})
@@ -23,9 +78,13 @@
                        "IPv6" "udp6"})
 (def *ssdp-port* 1900)
 
+(defonce *local-devices* (atom {}))
+
 (defonce *announcement-interval* 90000)
 
-(defonce *ssdp-announcement-timer* (atom nil))
+(defonce *msg-send-interval* 50)
+
+(defonce *ssdp-announcement-flag* (atom nil))
 
 ;;; SSDP module state vars:
 ;;; Map of open sockets:
@@ -41,7 +100,7 @@
 (defonce *announcements-pub* (events/wrap-atom *announcements*))
 
 ;;; A queue of announcements to be sent by this server.
-(defonce *announcement-queue* (atom []))
+(defonce *announcement-queue* (atom (async/chan)))
 
 (defn create-usn
   "Constructs a USN from the device id and service id."
@@ -59,6 +118,11 @@
   "Utility function extract the service id from a USN value."
   [usn]
   (second (str/split usn "::")))
+
+(defn get-uuid
+  "Utility function which extracts the UUID from the UDN."
+  [udn]
+  (second (str/split udn ":")))
 
 (defn expired? [now [key ann]]
   (< (:expiration ann) now))
@@ -92,36 +156,93 @@
   "Sends a multicast message from the supplied interface.
   A socket for the interface should have previously
   been opened with start-listener. See nodejs dgram.send()."
-  [iface message]
-  (log/trace "Sending SSDP message" iface message)
-  (when-let [socket (@*sockets* (iface :address))]
-    (.send socket message *ssdp-port* (*ssdp-mcast-addresses* (iface :family)))))
+  [socket message]
+  (log/info "Sending SSDP message" (.-address (.address socket)) message)
+  (.send socket message *ssdp-port* (*ssdp-mcast-addresses* (.-family (.address socket)))))
 
-(defn send-ssdp-search-message
-  "Sends a M-SEARCH SSDP Discovery message on all enabled interfaces."
-  [iface]
+(defmulti send-announcement (fn [msg iface] (:type msg)))
+
+(defmethod send-announcement :search
+  [msg iface]
   (send-ssdp-message iface (messages/emit-m-search-msg)))
 
-(defn send-ssdp-alive [iface service device-descriptor]
-  ; TODO: gotta send a message for each service
-  (send-ssdp-message iface (messages/emit-notify-msg "location" "ssdp:alive" "nt" "usn")))
+(defmethod send-announcement :notify [msg iface]
+  (let [{location :location, nt :nt, usn :usn} msg]
+    (send-ssdp-message iface (messages/emit-notify-msg location "ssdp:alive" nt usn))))
 
-(defn send-ssdp-byebye [iface service device-descriptor]
-  ; TODO: blah blah blah
-  (send-ssdp-message iface (messages/emit-device-goodbye "nt" "usn")))
+(defmethod send-announcement :response [msg iface]
+  (let [{location :location, st :st, usn :usn, server :server} msg]
+    (send-ssdp-message iface (messages/emit-m-search-response-msg location server st usn))))
 
-(defn queue-device-announcements [device-descriptor])
+(defmethod send-announcement :goodbye [msg iface]
+  (let [{nt :nt, usn :usn} msg]
+    (send-ssdp-message iface (messages/emit-device-goodbye nt usn))))
 
-(defn notify []
-  (log/info "Notify!"))
+(defn create-service-announcements [type udn loc service]
+  (let [{service-type :service-type} service]
+    {:type type
+     :nt service-type
+     :usn (create-usn udn service-type)
+     :location loc}))
+
+(defn create-device-announcements [type loc device]
+  (let [{udn :udn, device-type :device-type, version :version} device]
+    (concat (list
+             {:type type
+              :nt udn
+              :usn udn
+              :location loc}
+             {:type type
+              :nt (str device-type ":" version)
+              :usn (str udn "::" device-type ":" version)
+              :location loc})
+            (map (partial create-service-announcements type udn loc) (:service-list device)))))
+
+(defn create-root-device-announcements [type device]
+  (when device
+    (let [{udn :udn, device-type :device-type, version :version} device
+          uuid (get-uuid udn)
+          loc (str "/upnp/devices/" uuid "/devDesc.xml")]
+      (concat (list {:type type
+                     :nt "upnp:rootdevice"
+                     :usn (str udn "::upnp:rootdevice")
+                     :location loc})
+              (create-device-announcements type loc device)
+              (flatten (map (partial create-device-announcements type loc) (:device-list device)))))))
+
+(defn queue-device-announcements
+  "Queues 3+2d+k announcements for a device with d embedded devices, and k services."
+  [type device search-type]
+  (let [announcements (create-root-device-announcements type device)]
+    (async/go-loop [a announcements]
+      (when a
+        (async/>! @*announcement-queue* (first a))
+        (recur (rest a))))))
+
+(defn start-announcement-queue-processor []
+  (reset! *ssdp-announcement-flag* true)
+  (async/go-loop []
+    (let [ann (async/<! @*announcement-queue*)]
+      (when ann
+        (doseq [addr (keys @*sockets*)]
+          (let [loc (str "http://" addr ":3000" (:location ann))] ; backpatch location with IP address.
+            (send-announcement (assoc ann :location loc) (@*sockets* addr))))))
+    (async/<! (async/timeout *msg-send-interval*))
+    (when @*ssdp-announcement-flag*
+      (recur))))
 
 (defn start-notifications []
-  (reset! *ssdp-announcement-timer* (js/setInterval notify *announcement-interval*)))
+  (async/go-loop []
+    (doseq [device (vals @*local-devices*)]
+      (queue-device-announcements :notify device nil))
+    (async/<! (async/timeout *announcement-interval*))
+    (if @*ssdp-announcement-flag*
+      (recur)
+      (doseq [device (vals @*local-devices*)]
+        (queue-device-announcements :goodbye device nil)))))
 
 (defn stop-notifications []
-  (when @*ssdp-announcement-timer*
-    (js/clearInterval @*ssdp-announcement-timer*))
-  (reset! *ssdp-announcement-timer* nil))
+  (reset! *ssdp-announcement-flag* false))
 
 (defn remove-expired-items [items]
   (into {} (filter (comp not (partial expired? (js/Date.))) items)))
@@ -181,7 +302,7 @@
                      (try
                        (net/add-membership sock (*ssdp-mcast-addresses* (:family iface)) (:address iface))
                        (swap! *sockets* assoc (:address iface) socket)
-                       (send-ssdp-search-message iface)
+                       (send-announcement {:type :search} socket)
                        (catch :default err
                          (log/error err "Error joining multicast group on" (:address iface)))))))
     (net/bind-udp-socket sock *ssdp-port* (:address iface))

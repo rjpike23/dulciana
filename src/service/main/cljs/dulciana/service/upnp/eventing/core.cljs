@@ -124,7 +124,7 @@
 (defn handle-pub-server-request
   "Callback for when a pub-sub data event is received from an active socket."
   [src request response]
-  (log/debug "Event server received" (.-method request) "request")
+  (log/debug "Event server received a" (.-method request) "request")
   (case (.-method request)
     "NOTIFY" (let [c (async/chan 1 (map (fn [msg]
                                           {:message {:type :NOTIFY

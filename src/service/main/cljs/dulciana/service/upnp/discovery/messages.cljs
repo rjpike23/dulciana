@@ -18,6 +18,12 @@
                        (map (fn [[k v]] (str (str/upper-case (name k)) ": " v)) headers)))
        "\r\n\r\n"))
 
+(defn emit-ssdp-response-msg
+  [headers]
+  (str (str/join "\r\n"
+                 (cons "HTTP/1.1 200 OK"
+                       (map (fn [[k v]] (str (str/upper-case (name k)) ": " v)) headers)))))
+
 (defn emit-m-search-msg
   "Constructs a M-SEARCH SSDP discovery message. Returns a string."
   []
@@ -34,6 +40,14 @@
                           :nt notify-type
                           :nts nts
                           :usn usn}))
+
+(defn emit-m-search-response-msg [scdp-location server st usn]
+  (emit-ssdp-response-msg {:date (.toUTCString (js/Date.))
+                           :ext ""
+                           :location scdp-location
+                           :server server
+                           :st st
+                           :usn usn}))
 
 (defn emit-device-goodbye [notify-type usn]
   (emit-ssdp-request-msg "NOTIFY" "*"
