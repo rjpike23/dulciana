@@ -9,6 +9,7 @@
   (:require [cljs.core.async :as async]
             [cljs.nodejs :as nodejs]
             [hiccups.runtime :as hiccupsrt]
+            [dulciana.service.config :as config]
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.upnp.core :as upnp]
@@ -129,7 +130,7 @@
       (.get "/"
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
-    (reset! *http-server* (.listen express-app 3000))
+    (reset! *http-server* (.listen express-app (:dulciana-port @config/*config*)))
     (reset! *ws-server* express-ws-app)))
 
 (defn sente-router [ch hndlr]

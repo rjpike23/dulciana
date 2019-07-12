@@ -12,6 +12,7 @@
             [dulciana.service.spec :as dulc-spec]
             [dulciana.service.core :as core]
             [dulciana.service.events :as event]
+            [dulciana.service.config :as config]
             [dulciana.service.upnp.discovery.core-tests :as discovery-tests]
             [dulciana.service.upnp.discovery.messages-tests :as discovery-msg-tests]
             [cljs.test :refer-macros [async deftest is testing run-all-tests]]

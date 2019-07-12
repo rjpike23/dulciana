@@ -10,6 +10,7 @@
             [taoensso.timbre :as log :include-macros true]
             [events :as node-events]
             [dgram :as node-dgram]
+            [dulciana.service.config :as config]
             [dulciana.service.upnp.discovery.core :as discovery]))
 
 (def *expired-announcement*
@@ -76,7 +77,7 @@
         calls (atom #{})
         bind-fn (fn [& args]
                   (swap! calls conj :bind)
-                  (is (= discovery/*ssdp-port* (first args)))
+                  (is (= (:upnp-mcast-port @config/*config*) (first args)))
                   (is (or (= 1 (count args)) (= (:address iface) (second args))))
                   nil)
         add-m-fun (fn [& args]
