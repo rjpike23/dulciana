@@ -29,4 +29,9 @@
 (defn merge-config [new-config]
   (swap! *config* merge new-config))
 
+(defn get-value [path]
+  (if (sequential? path)
+    (get-in @*config* path)
+    (@*config* path)))
+
 (defn read-config-string [edn-string])

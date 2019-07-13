@@ -130,7 +130,7 @@
       (.get "/"
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
-    (reset! *http-server* (.listen express-app (:dulciana-port @config/*config*)))
+    (reset! *http-server* (.listen express-app (config/get-value :dulciana-port)))
     (reset! *ws-server* express-ws-app)))
 
 (defn sente-router [ch hndlr]

@@ -72,7 +72,7 @@
      upc
      version])
 
-(defonce *local-devices* (atom (:dulciana-init-local-devices @config/*config*)))
+(defonce *local-devices* (atom (config/get-value :dulciana-init-local-devices)))
 
 (defonce *ssdp-announcement-flag* (atom nil))
 
@@ -149,7 +149,9 @@
   [socket message]
   (log/info "Sending SSDP message" (.-address (.address socket)) message)
   (let [fam (.-family (.address socket))]
-    (.send socket message (:ssdp-mcast-address @config/*config*) (-> @config/*config* :ssdp-mcast-addresses fam))))
+    (.send socket message
+           (config/get-value :ssdp-mcast-port)
+           (config/get-value [:ssdp-mcast-addresses fam]))))
 
 (defmulti send-announcement (fn [msg iface] (:type msg)))
 
@@ -216,9 +218,10 @@
     (let [ann (async/<! @*announcement-queue*)]
       (when ann
         (doseq [addr (keys @*sockets*)]
-          (let [loc (str "http://" addr ":" (:dulciana-upnp-server-port @config/*config*) (:location ann))] ; backpatch location with IP address.
+          (let [loc (str "http://" addr ":" (config/get-value :dulciana-upnp-server-port) (:location ann))]
+                                        ; backpatch location with IP address.
             (send-announcement (assoc ann :location loc) (@*sockets* addr))))))
-    (async/<! (async/timeout (:dulciana-upnp-throttle-interval @config/*config*)))
+    (async/<! (async/timeout (config/get-value :dulciana-upnp-throttle-interval)))
     (when @*ssdp-announcement-flag*
       (recur))))
 
@@ -226,7 +229,7 @@
   (async/go-loop []
     (doseq [device (vals @*local-devices*)]
       (queue-device-announcements :notify device nil))
-    (async/<! (async/timeout (:dulciana-upnp-announcement-interval config/*config*)))
+    (async/<! (async/timeout (config/get-value :dulciana-upnp-announcement-interval)))
     (if @*ssdp-announcement-flag*
       (recur)
       (doseq [device (vals @*local-devices*)]
@@ -275,7 +278,8 @@
   The :message channel is returned without a consumer. An external consumer must be
   configured by the caller or UDP messages will be dropped."
   [[name iface]]
-  (let [{:keys [socket channels] :as sock} (net/create-udp-socket (-> @config/*config* :ssdp-protocols (:family iface)))]
+  (let [{:keys [family address]} iface
+        {:keys [socket channels] :as sock} (net/create-udp-socket (config/get-value [:ssdp-protocols family]))]
     (async/take! (:close channels)
                  (fn [[this]]
                    (log/debug "Socket closed" (:address iface))
@@ -292,12 +296,12 @@
                      (log/debug "Socket established" (:address iface))
                      (try
                        (net/add-membership sock
-                                           (-> @config/*config* :ssdp-mcast-addresses (:family iface)) (:address iface))
-                       (swap! *sockets* assoc (:address iface) socket)
+                                           (config/get-value [:ssdp-mcast-addresses family]) address)
+                       (swap! *sockets* assoc address socket)
                        (send-announcement {:type :search} socket)
                        (catch :default err
-                         (log/error err "Error joining multicast group on" (:address iface)))))))
-    (net/bind-udp-socket sock (:ssdp-mcast-port @config/*config*) (:address iface))
+                         (log/error err "Error joining multicast group on" address))))))
+    (net/bind-udp-socket sock (config/get-value :ssdp-mcast-port) address)
     sock))
 
 (defn create-message-map [[sock msg rinfo iface]]
