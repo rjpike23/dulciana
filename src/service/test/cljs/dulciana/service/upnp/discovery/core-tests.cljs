@@ -77,7 +77,7 @@
         calls (atom #{})
         bind-fn (fn [& args]
                   (swap! calls conj :bind)
-                  (is (= (:upnp-mcast-port @config/*config*) (first args)))
+                  (is (= (:ssdp-mcast-port @config/*config*) (first args)))
                   (is (or (= 1 (count args)) (= (:address iface) (second args))))
                   nil)
         add-m-fun (fn [& args]

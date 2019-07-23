@@ -109,27 +109,50 @@
     (str "<" tag ">" value "</" tag ">")
     ""))
 
-(defn emit-dd-icon [icon]
+(defn emit-dd-icon [{mime-type :mime-type
+                     depth :depth
+                     height :height
+                     width :width
+                     url :url}]
   (str/join "\n"
             ["<icon>"
-             (emit-xml-parameter "mimetype" (:mimetype icon))
-             (emit-xml-parameter "width" (:width icon))
-             (emit-xml-parameter "height" (:height icon))
-             (emit-xml-parameter "depth" (:depth icon))
-             (emit-xml-parameter "url" (:url icon))
+             (emit-xml-parameter "mimetype" mime-type)
+             (emit-xml-parameter "width" width)
+             (emit-xml-parameter "height" height)
+             (emit-xml-parameter "depth" depth)
+             (emit-xml-parameter "url" url)
              "</icon>"]))
 
-(defn emit-dd-service [service]
-  (str/join "\n"
-            ["<service>"
-             (emit-xml-parameter "serviceType" (:serviceType service))
-             (emit-xml-parameter "serviceId" (:serviceId service))
-             (emit-xml-parameter "SCPDURL" (:SCPDURL service))
-             (emit-xml-parameter "controlURL" (:controlURL service))
-             (emit-xml-parameter "eventSubURL" (:eventSubURL service))
-             "</service>"]))
+(defn emit-dd-service [dev-id
+                       {service-id :service-id
+                        service-type :service-type}]
+  (let [usn (str dev-id "::" service-type)]
+    (str/join "\n"
+              ["<service>"
+               (emit-xml-parameter "serviceType" service-type)
+               (emit-xml-parameter "serviceId" service-id)
+               (emit-xml-parameter "SCPDURL" (str "/upnp/services/" usn "/scpd.xml"))
+               (emit-xml-parameter "controlURL" (str "/upnp/services/" usn "/eventing"))
+               (emit-xml-parameter "eventSubURL" (str "/upnp/services/" usn "/control"))
+               "</service>"])))
 
-(defn emit-device-descriptor [dev]
+(defn emit-device-descriptor [{boot-id :boot-id
+                               config-id :config-id
+                               device-list :device-list
+                               device-type :device-type
+                               friendly-name :friendly-name
+                               icon-list :icon-list
+                               manufacturer :manufacturer
+                               manufacturer-url :manufacturer-url
+                               model-description :model-description
+                               model-name :model-name
+                               model-url :model-url
+                               presentation-url :presentation-url
+                               serial-number :serial-number
+                               service-list :service-list
+                               udn :udn
+                               upc :upc
+                               version :version}]
   (str/join "\n"
             ["<?xml version=\"1.0\"?>"
              (str "<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"" 1 "\">")
@@ -138,69 +161,84 @@
              "<minor>0</minor>"
              "</specVersion>"
              "<device>"
-             (emit-xml-parameter "deviceType" (-> dev :device :deviceType))
-             (emit-xml-parameter "friendlyName" (-> dev :device :friendlyName))
-             (emit-xml-parameter "manufacturer" (-> dev :device :manufacturer))
-             (emit-xml-parameter "manufacturerUrl" (-> dev :device :manufacturerURL))
-             (emit-xml-parameter "modelDescription" (-> dev :device :modelDescription))
-             (emit-xml-parameter "modelName" (-> dev :device :modelName))
-             (emit-xml-parameter "modelURL" (-> dev :device :modelURL))
-             (emit-xml-parameter "serialNumber" (-> dev :device :serialNumber))
-             (emit-xml-parameter "UDN" (-> dev :device :UDN))
-             (emit-xml-parameter "UPC" (-> dev :device :UPC))
-             (emit-xml-parameter "presentationURL" (-> dev :device :presentationURL))
-             "<iconList>" (str/join "\n" (map emit-dd-icon (-> dev :device :iconList))) "</iconList"
-             "<serviceList" (str/join "\n" (map emit-dd-service (-> dev :device :serviceList))) "</serviceList>"
-             "</device>"]))
+             (emit-xml-parameter "deviceType" device-type)
+             (emit-xml-parameter "friendlyName" friendly-name)
+             (emit-xml-parameter "manufacturer" manufacturer)
+             (emit-xml-parameter "manufacturerUrl" manufacturer-url)
+             (emit-xml-parameter "modelDescription" model-description)
+             (emit-xml-parameter "modelName" model-name)
+             (emit-xml-parameter "modelURL" model-url)
+             (emit-xml-parameter "serialNumber" serial-number)
+             (emit-xml-parameter "UDN" udn)
+             (emit-xml-parameter "UPC" upc)
+             (emit-xml-parameter "presentationURL" presentation-url)
+             "<iconList>" (str/join "\n" (map emit-dd-icon icon-list)) "</iconList>"
+             "<serviceList>" (str/join "\n" (map (partial emit-dd-service udn) service-list)) "</serviceList>"
+             "</device>"
+             "</root>"]))
 
-(defn emit-scpd-action-arg [arg]
+(defn emit-scpd-action-arg [{direction :direction
+                             name :name
+                             retval :retval
+                             related-state-variable :related-state-variable}]
   (str/join "\n"
             ["<argument>"
-             (emit-xml-parameter "name" (:name arg))
-             (emit-xml-parameter "direction" (:direction arg))
-             (emit-xml-parameter "relatedStateVariable" (:relatedStateVariable arg))
+             (emit-xml-parameter "name" name)
+             (emit-xml-parameter "direction" direction)
+             (emit-xml-parameter "relatedStateVariable" related-state-variable)
+             (when retval "<retval/>")
              "</argument>"]))
 
-(defn emit-scpd-action [action]
+(defn emit-scpd-action [{argument-list :argument-list
+                         name :name}]
   (str/join "\n"
             ["<action>"
-             (emit-xml-parameter "name" (:name action))
-             (str/join "\n" (map emit-scpd-action-arg (:argumentList action)))
+             (emit-xml-parameter "name" name)
+             "<argumentList>"
+             (str/join "\n" (map emit-scpd-action-arg argument-list))
+             "</argumentList>"
              "</action>"]))
 
-(defn emit-scpd-state-var-range [range]
-  (if range
-    (str/join "\n"
-              ["<allowedValueRange>"
-               (emit-xml-parameter "minimum" (:minimum range))
-               (emit-xml-parameter "maximum" (:maximum range))
-               (emit-xml-parameter "step" (:step range))
-               "</allowedValueRange>"])
-    ""))
+(defn emit-scpd-state-var-range [{maximum :maximum
+                                  minimum :minimum
+                                  step :step}]
+  (str/join "\n"
+            ["<allowedValueRange>"
+             (emit-xml-parameter "minimum" minimum)
+             (emit-xml-parameter "maximum" maximum)
+             (emit-xml-parameter "step" step)
+             "</allowedValueRange>"]))
 
 (defn emit-scpd-state-var-allowed-value [values]
   (if values
     (map (partial emit-xml-parameter "allowedValue") values)
     ""))
 
-(defn emit-scpd-state-var [state-var]
+(defn emit-scpd-state-var [{allowed-value-list :allowed-value-list
+                            allowed-value-range :allowed-value-range
+                            data-type :data-type
+                            default-value :default-value
+                            multicast :multicast
+                            name :name
+                            send-events :send-events}]
   (str/join "\n"
             [(str "<stateVariable"
-                  (if-let [se-attr (:sendEvents state-var)]
+                  (if-let [se-attr send-events]
                     (str " sendEvents=\"" se-attr "\"")
                     "")
-                  (if-let [mc-attr (:multicast state-var)]
+                  (if-let [mc-attr multicast]
                     (str " multicast=\"" mc-attr "\"")
                     "")
                   ">")
-             (emit-xml-parameter "name" (:name state-var))
-             (emit-xml-parameter "dataType" (:dataType state-var))
-             (emit-xml-parameter "defaultValue" (:defaultValue state-var))
-             (emit-scpd-state-var-range (:allowedValueRange state-var))
-             (emit-scpd-state-var-allowed-value (:allowedValueList state-var))
+             (emit-xml-parameter "name" name)
+             (emit-xml-parameter "dataType" data-type)
+             (emit-xml-parameter "defaultValue" default-value)
+             (emit-scpd-state-var-range allowed-value-range)
+             (emit-scpd-state-var-allowed-value allowed-value-list)
              "</stateVariable>"]))
 
-(defn emit-scpd [service]
+(defn emit-scpd [{action-list :action-list
+                  service-state-table :service-state-table}]
   (str/join "\n"
             ["<?xml version=\"1.0\"?>"
              (str "<scpd xmlns=\"urn:schemas-upnp-org:service-1-0\" configId=\"" 1 "\">")
@@ -208,7 +246,7 @@
              "<major>2</major>"
              "<minor>0</minor>"
              "</specVersion>"
-             "<actionList>" (str/join "\n" (map emit-scpd-action (:actionList service))) "</actionList>"
-             "<serviceStateTable>" (str/join "\n" (map emit-scpd-state-var (:serviceStateTable service))) "</serviceStateTable>"
+             "<actionList>" (str/join "\n" (map emit-scpd-action action-list)) "</actionList>"
+             "<serviceStateTable>" (str/join "\n" (map emit-scpd-state-var service-state-table)) "</serviceStateTable>"
              "</scpd>"]))
 

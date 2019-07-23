@@ -12,6 +12,7 @@
             [dulciana.service.config :as config]
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
+            [dulciana.service.store :as store]
             [dulciana.service.upnp.core :as upnp]
             [dulciana.service.upnp.control.core :as control]
             [dulciana.service.upnp.description.core :as description]
@@ -99,19 +100,19 @@
       (.get "/api/upnp/announcements"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @discovery/*announcements*)))))
+              (. res (send (pr-str @store/*announcements*)))))
       (.get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @description/*remote-devices*))))))
+              (. res (send (pr-str (filter-pending @store/*remote-devices*))))))
       (.get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @description/*remote-services*))))))
+              (. res (send (pr-str (filter-pending @store/*remote-services*))))))
       (.get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending (@description/*remote-services* (.-svcid (.-params req)))))))))
+              (. res (send (pr-str (filter-pending (@store/*remote-services* (.-svcid (.-params req)))))))))
       (.ws "/api/upnp/updates"
            (fn [ws req next]
              ((:ajax-get-or-ws-handshake-fn event-mgr) req nil nil{:websocket? true
@@ -166,15 +167,15 @@
     (upnp/start-upnp-services)
     (start-express-server! (start-sente!))
     (sente-router @*event-channel* sente-event-handler)
-    (add-watch discovery/*announcements* :update
+    (add-watch store/*announcements* :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-announcements new))))
-    (add-watch description/*remote-devices* :update
+    (add-watch store/*remote-devices* :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-devices (filter-pending new)))))
-    (add-watch description/*remote-services* :update
+    (add-watch store/*remote-services* :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-services (filter-pending new)))))
@@ -187,9 +188,9 @@
    (teardown))
   ([]
    (try
-     (remove-watch discovery/*announcements* :update)
-     (remove-watch description/*remote-devices* :update)
-     (remove-watch description/*remote-services* :update)
+     (remove-watch store/*announcements* :update)
+     (remove-watch store/*remote-devices* :update)
+     (remove-watch store/*remote-services* :update)
      (upnp/stop-upnp-services)
      (when @*http-server* (.close @*http-server*))
      (when @*event-channel*) (async/close! @*event-channel*)

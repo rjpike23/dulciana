@@ -12,13 +12,12 @@
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.parser :as parser]
+            [dulciana.service.store :as store]
             [dulciana.service.xml :as dulc-xml]
             [dulciana.service.upnp.discovery.core :as discovery]
             [dulciana.service.upnp.discovery.messages :as disc-msg]
             [dulciana.service.upnp.description.core :as description]
             [http :as http]))
-
-(defonce *subscriptions* (atom {}))
 
 ;;; HTTP server socket for eventing:
 (defonce *event-server* (atom {}))
@@ -29,7 +28,7 @@
 
 (defn update-subscription-state [event]
   (let [sid (-> event :message :headers :sid)]
-    (if (@*subscriptions* sid)
+    (if (@store/*subscriptions* sid)
       (do
         ; TODO: dispatch event to service specific handler.
         (when (:ok event)
@@ -56,14 +55,14 @@
     (let [sid (-> msg :message :headers :sid)
           delta-ts (js/parseInt (second (re-matches #"Second-(\d*)"
                                                     (-> msg :message :headers :timeout))))]
-      (update-subscriptions *subscriptions*
+      (update-subscriptions store/*subscriptions*
                                   {:sid sid
                                    :expiration (js/Date. (+ (* 1000 delta-ts) (.getTime (js/Date.))))
                                    :dev-id device-id
                                    :svc-id service-id})
       (async/go
         (async/<! (async/timeout (* 1000 (- delta-ts 60)))) ; resub 60s before expiration.
-        (when (@*subscriptions* sid) ; make sure still subbed.
+        (when (@store/*subscriptions* sid) ; make sure still subbed.
           (resubscribe sid))))
     (log/warn "Error (" (-> msg :message :status-code) ":" (-> msg :message :status-message)
               ") received from subscribe request, dev" device-id "svc" service-id)))
@@ -82,7 +81,7 @@
              (handle-subscribe-response msg device-id service-id))))))))
 
 (defn resubscribe [sub-id]
-  (let [sub (@*subscriptions* sub-id)
+  (let [sub (@store/*subscriptions* sub-id)
         svc (description/find-service (:dev-id sub) (:svc-id sub))
         ann (discovery/find-announcement (:dev-id sub))]
     (when (and svc ann)
@@ -92,11 +91,11 @@
             (handle-subscribe-response msg (:dev-id sub) (:svc-id sub))))))))
 
 (defn unsubscribe [sub-id]
-  (let [sub (@*subscriptions* sub-id)]
+  (let [sub (@store/*subscriptions* sub-id)]
     (net/send-unsubscribe-message (:sid sub)
                                   (discovery/find-announcement (:dev-id sub))
                                   (description/find-service (:dev-id sub) (:svc-id sub)))
-    (remove-subscriptions *subscriptions* sub)))
+    (remove-subscriptions store/*subscriptions* sub)))
 
 ;;; Handler for UPNP pub-sub events
 (defn respond [response code message]

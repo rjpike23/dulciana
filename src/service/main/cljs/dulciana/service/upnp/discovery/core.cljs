@@ -14,8 +14,9 @@
             [dulciana.service.config :as config]
             [dulciana.service.events :as events]
             [dulciana.service.upnp.discovery.messages :as messages]
+            [dulciana.service.net :as net]
             [dulciana.service.parser :as parser]
-            [dulciana.service.net :as net]))
+            [dulciana.service.store :as store]))
 
 (defrecord argument
     [direction
@@ -43,6 +44,7 @@
 
 (defrecord service
     [action-list
+     service-id
      service-state-table
      service-type])
 
@@ -72,8 +74,6 @@
      upc
      version])
 
-(defonce *local-devices* (atom (config/get-value :dulciana-init-local-devices)))
-
 (defonce *ssdp-announcement-flag* (atom nil))
 
 ;;; SSDP module state vars:
@@ -82,12 +82,6 @@
 
 ;;; Publication of SSDP messages
 (defonce *ssdp-pub* (atom nil))
-
-;;; A map of all received announcements.
-(defonce *announcements* (atom {}))
-
-;;; A core.async/pub of updates to the *announcements* atom.
-(defonce *announcements-pub* (events/wrap-atom *announcements*))
 
 ;;; A queue of announcements to be sent by this server.
 (defonce *announcement-queue* (atom (async/chan)))
@@ -119,13 +113,13 @@
 
 (defn get-announced-device-ids
   ([]
-   (get-announced-device-ids @*announcements*))
+   (get-announced-device-ids @store/*announcements*))
   ([announcement-map]
    (set (map (fn [[k v]] (get-dev-id k)) announcement-map))))
 
 (defn get-announced-services-for-device
   ([dev-id]
-   (get-announced-services-for-device dev-id @*announcements*))
+   (get-announced-services-for-device dev-id @store/*announcements*))
   ([dev-id announcement-map]
    (set (map (fn [[k v]] k)
              (filter (fn [[k v]] (str/starts-with? k dev-id))
@@ -133,7 +127,7 @@
 
 (defn find-announcement [dev-id]
   (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
-        @*announcements*))
+        @store/*announcements*))
 
 (defn device-member?
   "Utility function to determine if a service with the supplied
@@ -227,12 +221,12 @@
 
 (defn start-notifications []
   (async/go-loop []
-    (doseq [device (vals @*local-devices*)]
+    (doseq [device (vals @store/*local-devices*)]
       (queue-device-announcements :notify device nil))
     (async/<! (async/timeout (config/get-value :dulciana-upnp-announcement-interval)))
     (if @*ssdp-announcement-flag*
       (recur)
-      (doseq [device (vals @*local-devices*)]
+      (doseq [device (vals @store/*local-devices*)]
         (queue-device-announcements :goodbye device nil)))))
 
 (defn stop-notifications []
@@ -260,13 +254,13 @@
 (defn process-notification [notification]
   (let [notify-type (-> notification :message :headers :nts)]
     (case notify-type
-      "ssdp:alive" (update-announcements *announcements* notification)
-      "ssdp:update" (update-announcements *announcements* notification)
-      "ssdp:byebye" (remove-announcements *announcements* notification)
+      "ssdp:alive" (update-announcements store/*announcements* notification)
+      "ssdp:update" (update-announcements store/*announcements* notification)
+      "ssdp:byebye" (remove-announcements store/*announcements* notification)
       (log/warn "Ignoring announcement type" notify-type))))
 
 (defn process-ssdp-response [response]
-  (update-announcements *announcements* response))
+  (update-announcements store/*announcements* response))
 
 (defn start-listener
   "Starts an SSDP listener on the specified interface. Returns a map with two entries,

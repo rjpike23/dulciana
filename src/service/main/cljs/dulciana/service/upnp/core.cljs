@@ -10,48 +10,56 @@
             [taoensso.timbre :as log :include-macros true]
             [express :as express]
             [url :as url]
+            [dulciana.service.config :as config]
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
+            [dulciana.service.store :as store]
             [dulciana.service.upnp.discovery.core :as discovery]
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.eventing.core :as eventing]))
 
-(defonce *upnp-http-server* (atom {}))
+(defonce *upnp-http-server* (atom nil))
 
-(def *upnp-app* (express))
-
-(. *upnp-app* (get "/upnp/devices/:devid/devdesc.xml" (fn [req res]
-                                                        (log/info "Got dev desc request")
-                                                        (. res (send "Thanks")))))
-(. *upnp-app* (get "/upnp/services/:usn/scpd.xml" (fn [req res]
-                                                    (log/info "Get scpd request")
-                                                    (. res (send "Thanks")))))
-(. *upnp-app* (notify "/upnp/events" (fn [req res]
-                                       (log/info "Got event notify request")
-                                       (. res (send "Thanks")))))
-(. *upnp-app* (subscribe "/upnp/services/:usn/eventing"
-                         (fn [req res]
-                           (log/info "Got subscribe request")
-                           (. res (send "Thanks")))))
-(. *upnp-app* (unsubscribe "/upnp/services/:usn/eventing"
-                           (fn [req res]
-                             (log/info "Got unsubscribe request")
-                             (. res (send "Thanks")))))
-(. *upnp-app* (post "/upnp/services/:usn/control"
+(defn start-upnp-http-server! []
+  (when (config/get-value :dulciana-upnp-server-enable)
+    (let [upnp-app (express)]
+      (doto upnp-app
+        (.get "/upnp/devices/:devid/devdesc.xml"
+              description/handle-dev-desc-request)
+        (.get "/upnp/services/:usn/scpd.xml"
+              description/handle-scpd-request)
+        (.notify "/upnp/events" (fn [req res]
+                                  (log/info "Got event notify request")
+                                  (. res (send "Thanks"))))
+        (.subscribe "/upnp/services/:usn/eventing"
                     (fn [req res]
-                      (log/info "Got control request")
-                      (. res (send "Thanks")))))
+                      (log/info "Got subscribe request")
+                      (. res (send "Thanks"))))
+        (.unsubscribe "/upnp/services/:usn/eventing"
+                      (fn [req res]
+                        (log/info "Got unsubscribe request")
+                        (. res (send "Thanks"))))
+        (.post "/upnp/services/:usn/control"
+               (fn [req res]
+                 (log/info "Got control request")
+                 (. res (send "Thanks")))))
+      (reset! *upnp-http-server* (.listen upnp-app (config/get-value :dulciana-upnp-server-port))))))
+
+(defn stop-upnp-http-server! []
+  (when @*upnp-http-server*
+    (.close @*upnp-http-server*)))
  
 (defn register-device [device-descriptor]
-  (swap! discovery/*local-devices* assoc (:udn device-descriptor) device-descriptor)
+  (swap! store/*local-devices* assoc (:udn device-descriptor) device-descriptor)
   (discovery/queue-device-announcements :notify device-descriptor nil))
 
 (defn deregister-devices [devid]
-  (when-let [device (@description/*local-devices* devid)]
-    (swap! description/*local-devices* dissoc devid)
+  (when-let [device (@store/*local-devices* devid)]
+    (swap! store/*local-devices* dissoc devid)
     (discovery/queue-device-announcements :goodbye device nil)))
 
 (defn start-upnp-services []
+  (start-upnp-http-server!)
   (discovery/start-listeners)
   (discovery/start-notifications)
   (description/start-listeners)
@@ -61,4 +69,5 @@
   (eventing/stop-event-server)
   (description/stop-listeners)
   (discovery/stop-notifications)
-  (discovery/stop-listeners))
+  (discovery/stop-listeners)
+  (stop-upnp-http-server!))
