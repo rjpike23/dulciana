@@ -18,3 +18,6 @@
               "SOAPACTION" (str "\"" service-type "#" action-name "\"")}]
     (log/info "send-control-request" url service-type action-name params msg hdrs)
     (async/pipe (net/send-http-request "POST" url hdrs msg {}) result-chan)))
+
+(defn handle-control-request [req res]
+  (msg/control-request-parse (.-body req)))

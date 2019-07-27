@@ -14,6 +14,7 @@
             [dulciana.service.events :as events]
             [dulciana.service.net :as net]
             [dulciana.service.store :as store]
+            [dulciana.service.upnp.control.core :as control]
             [dulciana.service.upnp.discovery.core :as discovery]
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.eventing.core :as eventing]))
@@ -40,9 +41,7 @@
                         (log/info "Got unsubscribe request")
                         (. res (send "Thanks"))))
         (.post "/upnp/services/:usn/control"
-               (fn [req res]
-                 (log/info "Got control request")
-                 (. res (send "Thanks")))))
+               control/handle-control-request))
       (reset! *upnp-http-server* (.listen upnp-app (config/get-value :dulciana-upnp-server-port))))))
 
 (defn stop-upnp-http-server! []

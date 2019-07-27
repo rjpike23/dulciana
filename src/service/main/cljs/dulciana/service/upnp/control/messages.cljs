@@ -7,7 +7,14 @@
 (ns dulciana.service.upnp.control.messages
   (:require [taoensso.timbre :as log :include-macros true]
             [tubax.core :as xml]
-            [tubax.helpers :as xml-util]))
+            [tubax.helpers :as xml-util]
+            [dulciana.service.xml :as dulc-xml]))
+
+(defn control-request-parse
+  ""
+  [msg]
+  (dulc-xml/munge-namespaces
+   (xml/xml->clj msg) {}))
 
 (defn control-response-parse
   ""
@@ -22,7 +29,6 @@
 (defn analyze-control-response
   ""
   [resp]
-  (log/info "Analyzing" resp)
   (into {} (map (fn [elt] [(:tag elt) (xml-util/text elt)])
                 (:content (first (:content (first (:content resp))))))))
 

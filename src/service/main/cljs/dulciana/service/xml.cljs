@@ -16,8 +16,12 @@
         (map (fn [[k v]]
                [(subs (name k) (count "xmlns:")) v])
              (filter (fn [[k v]] (str/starts-with? (name k) "xmlns"))
-                          attrs))))
-(defn munge-namespaces [xml ns-ctx]
+                     attrs))))
+
+(defn munge-namespaces
+  "Processes xml map returned by tubax, converting ns qualified tag names
+  to pairs, [tag-name namespace]. "
+  [xml ns-ctx]
   (if (and (map? xml) (:tag xml))
     (let [ns-cur (merge ns-ctx (ns-map (:attributes xml)))
           tag-split (str/split (name (:tag xml)) ":")
