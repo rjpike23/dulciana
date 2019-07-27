@@ -18,62 +18,6 @@
             [dulciana.service.parser :as parser]
             [dulciana.service.store :as store]))
 
-(defrecord argument
-    [direction
-     name
-     retval
-     related-state-variable])
-
-(defrecord action
-    [argument-list
-     name])
-
-(defrecord allowed-value-range
-    [maximum
-     minimum
-     step])
-
-(defrecord service-state-variable
-    [allowed-value-list
-     allowed-value-range
-     data-type
-     default-value
-     multicast
-     name
-     send-events])
-
-(defrecord service
-    [action-list
-     service-id
-     service-state-table
-     service-type])
-
-(defrecord icon
-    [mime-type
-     depth
-     height
-     width
-     url])
-
-(defrecord device
-    [boot-id
-     config-id
-     device-list
-     device-type
-     friendly-name
-     icon-list
-     manufacturer
-     manufacturer-url
-     model-description
-     model-name
-     model-url
-     presentation-url
-     serial-number
-     service-list
-     udn
-     upc
-     version])
-
 (defonce *ssdp-announcement-flag* (atom nil))
 
 ;;; SSDP module state vars:

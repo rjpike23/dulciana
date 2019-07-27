@@ -1,26 +1,27 @@
 (ns ^:figwheel-always dulciana.service.upnp.description.messages-tests
   (:require [cljs.test :refer-macros [async deftest is testing run-tests]]
             [taoensso.timbre :as log :include-macros true]
+            [dulciana.service.store :as store]
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.discovery.core :as discovery]
             [dulciana.service.upnp.description.messages :as messages]))
 
-(def sample-service (discovery/map->service
-                     {:action-list [(discovery/map->action
+(def sample-service (store/map->service
+                     {:action-list [(store/map->action
                                      {:name "name"
-                                      :argument-list [(discovery/map->argument
+                                      :argument-list [(store/map->argument
                                                        {:direction "out"
                                                         :name "name"
                                                         :retval true
                                                         :related-state-variable "related-state-variable"})
-                                                      (discovery/map->argument
+                                                      (store/map->argument
                                                        {:direction "out"
                                                         :name "name2"
                                                         :related-state-variable "related-state-variable2"})]})]
                       :service-id "service-id"
-                      :service-state-table [(discovery/map->service-state-variable
+                      :service-state-table [(store/map->service-state-variable
                                              {:allowed-value-list ["test1" "test2" "test3"]
-                                              :allowed-value-range (discovery/map->allowed-value-range
+                                              :allowed-value-range (store/map->allowed-value-range
                                                                     {:maximum "100"
                                                                      :minimum "0"
                                                                      :step "1"})
@@ -50,12 +51,12 @@
                     :name "name"}), 
                   :specVersion {:minor "0", :major "2"}})
 
-(def sample-device (discovery/map->device {:boot-id "boot-id"
+(def sample-device (store/map->device {:boot-id "boot-id"
                                            :config-id "config-id"
                                            :device-list "device-list"
                                            :device-type "device-type"
                                            :friendly-name "friendly-name"
-                                           :icon-list [(discovery/map->icon
+                                           :icon-list [(store/map->icon
                                                         {:mime-type "mime-type"
                                                          :depth "depth"
                                                          :height "height"

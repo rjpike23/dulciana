@@ -11,6 +11,7 @@
             [events :as node-events]
             [dgram :as node-dgram]
             [dulciana.service.config :as config]
+            [dulciana.service.store :as store]
             [dulciana.service.upnp.discovery.core :as discovery]))
 
 (def *expired-announcement*
@@ -139,16 +140,16 @@
                  (done)))))))
 
 (deftest create-root-device-announcements-test
-  (let [dd (discovery/map->device
+  (let [dd (store/map->device
             {:udn "uuid:test-device-uuid"
              :device-type "test-device-type"
              :version "1.0"
-             :device-list (list (discovery/map->device {:udn "uuid:test-embedded-device-uuid"
+             :device-list (list (store/map->device {:udn "uuid:test-embedded-device-uuid"
                                                           :device-type "test-embedded-device-type"
                                                           :version "2.0"
-                                                          :service-list (list (discovery/map->service {:service-type "test-service-type-0"}))}))
-             :service-list (list (discovery/map->service {:service-type "test-service-type-1"})
-                                 (discovery/map->service {:service-type "test-service-type-2"}))})
+                                                          :service-list (list (store/map->service {:service-type "test-service-type-0"}))}))
+             :service-list (list (store/map->service {:service-type "test-service-type-1"})
+                                 (store/map->service {:service-type "test-service-type-2"}))})
         ann (discovery/create-root-device-announcements :notification-type dd)]
     (is (= 8 (count ann)))
     (is (every? #(= (:type %) :notification-type) ann))
