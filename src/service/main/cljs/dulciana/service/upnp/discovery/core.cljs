@@ -30,28 +30,6 @@
 ;;; A queue of announcements to be sent by this server.
 (defonce *announcement-queue* (atom (async/chan)))
 
-(defn create-usn
-  "Constructs a USN from the device id and service id."
-  [dev-id svc-id]
-  (if svc-id
-    (str dev-id "::" svc-id)
-    dev-id))
-
-(defn get-dev-id
-  "Utility function to extract the device id from a USN value."
-  [usn]
-  (first (str/split usn "::")))
-
-(defn get-svc-id
-  "Utility function extract the service id from a USN value."
-  [usn]
-  (second (str/split usn "::")))
-
-(defn get-uuid
-  "Utility function which extracts the UUID from the UDN."
-  [udn]
-  (second (str/split udn ":")))
-
 (defn expired? [now [key ann]]
   (< (:expiration ann) now))
 
@@ -59,7 +37,7 @@
   ([]
    (get-announced-device-ids @store/*announcements*))
   ([announcement-map]
-   (set (map (fn [[k v]] (get-dev-id k)) announcement-map))))
+   (set (map (fn [[k v]] (store/get-dev-id k)) announcement-map))))
 
 (defn get-announced-services-for-device
   ([dev-id]
@@ -68,10 +46,6 @@
    (set (map (fn [[k v]] k)
              (filter (fn [[k v]] (str/starts-with? k dev-id))
                      announcement-map)))))
-
-(defn find-announcement [dev-id]
-  (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
-        @store/*announcements*))
 
 (defn device-member?
   "Utility function to determine if a service with the supplied
@@ -113,7 +87,7 @@
   (let [{service-type :service-type} service]
     {:type type
      :nt service-type
-     :usn (create-usn udn service-type)
+     :usn (store/create-usn udn service-type)
      :location loc}))
 
 (defn create-device-announcements [type loc device]
@@ -132,7 +106,7 @@
 (defn create-root-device-announcements [type device]
   (when device
     (let [{udn :udn, device-type :device-type, version :version} device
-          uuid (get-uuid udn)
+          uuid (store/get-uuid udn)
           loc (str "/upnp/devices/" uuid "/devDesc.xml")]
       (concat (list {:type type
                      :nt "upnp:rootdevice"
@@ -189,7 +163,7 @@
   "Remove all announcements from state that have the same device id as the
   supplied notification."
   [announcements-atom notification]
-  (let [id (get-dev-id (-> notification :message :headers :usn))]
+  (let [id (store/get-dev-id (-> notification :message :headers :usn))]
     (swap! announcements-atom
            (fn [anns]
              (into {} (filter (fn [[k v]] (not (device-member? id k)))

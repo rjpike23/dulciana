@@ -21,44 +21,27 @@
 
 (defonce *remote-services-sub* (atom nil))
 
-(defn find-device [dev-id]
-  (some (fn [[k v]] (and (= (discovery/get-dev-id k) dev-id) v))
-        @store/*remote-devices*))
-
-(defn find-all-service-ids-for-device [dev-id]
-  (map #(:serviceId %)
-       (-> (find-device dev-id) :device :serviceList)))
-
-(defn find-service [dev-id svc-id]
-  (let [dev (find-device dev-id)]
-    (when dev
-      (some #(and (= (:serviceId %) svc-id) %)
-            (-> dev :device :serviceList)))))
-
-(defn find-scpd [svc-usn]
-  (@store/*remote-services* svc-usn))
-
 (defn get-control-url [svc-usn]
-  (let [ann (@store/*announcements* (discovery/get-dev-id svc-usn))
-        svc (find-service (discovery/get-dev-id svc-usn) (discovery/get-svc-id svc-usn))]
+  (let [ann (@store/*announcements* (store/get-dev-id svc-usn))
+        svc (store/find-service (store/get-dev-id svc-usn) (store/get-svc-id svc-usn))]
      (url/resolve (-> ann :message :headers :location) (:controlURL svc))))
 
 (defn get-event-url [svc-usn]
-  (let [ann (@store/*announcements* (discovery/get-dev-id svc-usn))
-        scpd (find-scpd svc-usn)]
+  (let [ann (@store/*announcements* (store/get-dev-id svc-usn))
+        scpd (store/find-scpd svc-usn)]
     (url/resolve (-> ann :message :headers :location) (:eventSubURL scpd))))
 
 ;;; HTTP handlers for descriptors:
 (defn handle-dev-desc-request [req res]
-  (let [dd (@store/*local-devices* (.-devid (.-params req)))]
+  (let [dd (@store/find-local-device (.-devid (.-params req)))]
     (if dd
       (. res (send (msg/emit-device-descriptor dd)))
       (. res (sendStatus 404 )))))
 
 (defn handle-scpd-request [req res]
-  (let [dd (@store/*local-devices* (.-usn (.-params req)))]
-    (if dd
-      (. res (send (msg/emit-scpd dd)))
+  (let [svc (@store/find-local-service (.-usn (.-params req)))]
+    (if svc
+      (. res (send (msg/emit-scpd svc)))
       (. res (sendStatus 404)))))
 
 ;;; HTTP methods for sending requests for descriptors / SOAP requests below:
@@ -90,8 +73,8 @@
     (when (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
-          (when-let [ann (discovery/find-announcement (discovery/get-dev-id k))]
-            (when-let [svc (find-service (discovery/get-dev-id k) (discovery/get-svc-id k))]
+          (when-let [ann (store/find-announcement (store/get-dev-id k))]
+            (when-let [svc (store/find-service (store/get-dev-id k) (store/get-svc-id k))]
               (let [c (request-service-descriptor ann svc)
                     result (async/<! c)]
                 (swap! store/*remote-services* assoc k (:message result))))))))))
@@ -101,22 +84,22 @@
      (if (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
-          (when-let [ann (discovery/find-announcement k)]
+          (when-let [ann (store/find-announcement k)]
             (let [c (request-device-descriptor ann)
                   result (async/<! c)]
               (swap! store/*remote-devices* assoc k (:message result))))))
       (swap! store/*remote-services*
              (fn [svcs]
-               (merge (into {} (map (fn [s] [(discovery/create-usn k (:serviceId s)) (atom :new)])
+               (merge (into {} (map (fn [s] [(store/create-usn k (:serviceId s)) (atom :new)])
                                     (-> v :device :serviceList)))
                       svcs))))))
 
 (defn process-discovery-updates [discovery-updates]
   (swap! store/*remote-devices*
          (fn [devs]
-            (let [deletes (set (map discovery/get-dev-id (:delete discovery-updates)))
+            (let [deletes (set (map store/get-dev-id (:delete discovery-updates)))
                  devs-dels (apply dissoc devs deletes)
-                 adds (set/difference (set (map discovery/get-dev-id (keys (:add discovery-updates))))
+                 adds (set/difference (set (map store/get-dev-id (keys (:add discovery-updates))))
                                       (set (keys @store/*remote-devices*)))]
               (into devs-dels (map (fn [k] [k (atom :new)]) adds))))))
 

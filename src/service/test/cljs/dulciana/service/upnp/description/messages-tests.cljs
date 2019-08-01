@@ -33,22 +33,22 @@
                       :service-type "service-type"}))
 
 (def scpd-result {:serviceStateTable
-                  ({:allowedValueRange {:step "1", :maximum "100", :minimum "0"},
-                    :defaultValue "default-value",
-                    :dataType "data-type",
-                    :name "name",
-                    :multicast "multicast",
-                    :sendEvents "send-events"}),
+                  [{:allowedValueRange {:step "1", :maximum "100", :minimum "0"},
+                     :defaultValue "default-value",
+                     :dataType "data-type",
+                     :name "name",
+                     :multicast "multicast",
+                     :sendEvents "send-events"}],
                   :actionList
-                  ({:argumentList
-                    ({:relatedStateVariable "related-state-variable2",
+                  [{:argumentList
+                    [{:relatedStateVariable "related-state-variable2",
                       :direction "out",
                       :name "name2"}
                      {:retval true,
                       :relatedStateVariable "related-state-variable",
                       :direction "out",
-                      :name "name"}),
-                    :name "name"}), 
+                      :name "name"}],
+                    :name "name"}], 
                   :specVersion {:minor "0", :major "2"}})
 
 (def sample-device (store/map->device {:boot-id "boot-id"
@@ -78,21 +78,21 @@
              {:modelDescription "model-description",
               :serialNumber "serial-number",
               :iconList
-              ({:url "url",
-                :depth "depth",
-                :height "height",
-                :width "width",
-                :mimetype "mime-type"}),
+              [{:url "url",
+                 :depth "depth",
+                 :height "height",
+                 :width "width",
+                 :mimetype "mime-type"}],
               :modelName "model-name",
               :friendlyName "friendly-name",
               :deviceType "device-type",
               :manufacturer "manufacturer",
               :serviceList
-              ({:eventSubURL "/upnp/services/udn::service-type/control",
-                :controlURL "/upnp/services/udn::service-type/eventing",
-                :SCPDURL "/upnp/services/udn::service-type/scpd.xml",
-                :serviceId "service-id",
-                :serviceType "service-type"}),
+              [{:eventSubURL "/upnp/services/udn::service-type/control",
+                 :controlURL "/upnp/services/udn::service-type/eventing",
+                 :SCPDURL "/upnp/services/udn::service-type/scpd.xml",
+                 :serviceId "service-id",
+                 :serviceType "service-type"}],
               :UDN "udn"}, 
              :specVersion {:minor "0", :major "2"}})
 
@@ -106,4 +106,4 @@
   (is (= scpd-result
          (messages/analyze-service-descriptor
           (tubax.core/xml->clj
-           (messages/emit-device-descriptor sample-service))))))
+           (messages/emit-scpd sample-service))))))

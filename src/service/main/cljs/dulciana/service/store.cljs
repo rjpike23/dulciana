@@ -1,5 +1,6 @@
 (ns dulciana.service.store
-  (:require [taoensso.timbre :as log :include-macros true]
+  (:require [clojure.string :as str]
+            [taoensso.timbre :as log :include-macros true]
             [dulciana.service.config :as config]
             [dulciana.service.events :as events]))
 
@@ -59,6 +60,10 @@
      upc
      version])
 
+(defprotocol upnp-service
+  (get-state-atom [this])
+  (invoke-action [this action-name args]))
+
 (defonce *subscriptions* (atom {}))
 
 ;;; A map of all received announcements.
@@ -77,3 +82,58 @@
 
 (defonce *local-devices* (atom (config/get-value :dulciana-init-local-devices)))
 
+(defn create-usn
+  "Constructs a USN from the device id and service id."
+  [dev-id svc-id]
+  (if svc-id
+    (str dev-id "::" svc-id)
+    dev-id))
+
+(defn get-dev-id
+  "Utility function to extract the device id from a USN value."
+  [usn]
+  (first (str/split usn "::")))
+
+(defn get-svc-id
+  "Utility function extract the service id from a USN value."
+  [usn]
+  (second (str/split usn "::")))
+
+(defn get-uuid
+  "Utility function which extracts the UUID from the UDN."
+  [udn]
+  (second (str/split udn ":")))
+
+(defn find-announcement [dev-id]
+  (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
+        @*announcements*))
+
+(defn find-device [dev-id]
+  (some (fn [[k v]] (and (= (get-dev-id k) dev-id) v))
+        @*remote-devices*))
+
+(defn find-service [dev-id svc-id]
+  (let [dev (find-device dev-id)]
+    (when dev
+      (some #(and (= (:serviceId %) svc-id) %)
+            (-> dev :device :serviceList)))))
+
+(defn find-all-service-ids-for-device [dev-id]
+  (map #(:serviceId %)
+       (-> (find-device dev-id) :device :serviceList)))
+
+(defn find-scpd [svc-usn]
+  (@*remote-services* svc-usn))
+
+(defn find-local-device [devid]
+  (@*local-devices* devid))
+
+(defn find-local-service
+  ([usn]
+   (find-local-service (get-dev-id usn) (get-svc-id usn)))
+  ([devid svcid]
+   (let [dev (find-local-device devid)]
+     (when dev
+       (let [svcs (:service-list dev)]
+         (some (fn [svc] (= (:service-id svc) svcid))
+               svcs))))))

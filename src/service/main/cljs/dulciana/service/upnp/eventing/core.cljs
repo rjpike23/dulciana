@@ -71,8 +71,8 @@
   ([device-id service-id]
    (subscribe device-id service-id []))
   ([device-id service-id state-var-list]
-   (let [svc (description/find-service device-id service-id)
-         ann (discovery/find-announcement device-id)]
+   (let [svc (store/find-service device-id service-id)
+         ann (store/find-announcement device-id)]
      (log/debug "Subscribe called" svc ann)
      (when (and svc ann)
        (let [c (net/send-subscribe-message ann svc)]
@@ -82,8 +82,8 @@
 
 (defn resubscribe [sub-id]
   (let [sub (@store/*subscriptions* sub-id)
-        svc (description/find-service (:dev-id sub) (:svc-id sub))
-        ann (discovery/find-announcement (:dev-id sub))]
+        svc (store/find-service (:dev-id sub) (:svc-id sub))
+        ann (store/find-announcement (:dev-id sub))]
     (when (and svc ann)
       (let [c (net/send-resubscribe-message sub ann svc)]
         (async/go
@@ -93,8 +93,8 @@
 (defn unsubscribe [sub-id]
   (let [sub (@store/*subscriptions* sub-id)]
     (net/send-unsubscribe-message (:sid sub)
-                                  (discovery/find-announcement (:dev-id sub))
-                                  (description/find-service (:dev-id sub) (:svc-id sub)))
+                                  (store/find-announcement (:dev-id sub))
+                                  (store/find-service (:dev-id sub) (:svc-id sub)))
     (remove-subscriptions store/*subscriptions* sub)))
 
 ;;; Handler for UPNP pub-sub events
