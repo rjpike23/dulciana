@@ -60,11 +60,21 @@
      upc
      version])
 
+(defrecord subscription
+    [callback
+     sid
+     statevar
+     timestamp
+     timeout
+     usn])
+
 (defprotocol upnp-service
   (get-state-atom [this])
   (invoke-action [this action-name args]))
 
-(defonce *subscriptions* (atom {}))
+(defonce *external-subscriptions* (atom {}))
+
+(defonce *internal-subscriptions* (atom {}))
 
 ;;; A map of all received announcements.
 (defonce *announcements* (atom {}))
@@ -137,3 +147,11 @@
        (let [svcs (:service-list dev)]
          (some (fn [svc] (= (:service-id svc) svcid))
                svcs))))))
+
+(defn create-subscription [usn callback statevar timestamp timeout]
+  (->subscription callback
+                  (str "uuid:" (random-uuid))
+                  statevar
+                  timestamp
+                  timeout
+                  usn))

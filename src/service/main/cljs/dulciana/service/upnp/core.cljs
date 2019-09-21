@@ -29,17 +29,12 @@
               description/handle-dev-desc-request)
         (.get "/upnp/services/:usn/scpd.xml"
               description/handle-scpd-request)
-        (.notify "/upnp/events" (fn [req res]
-                                  (log/info "Got event notify request")
-                                  (. res (send "Thanks"))))
+        (.notify "/upnp/events"
+                 eventing/handle-event-notification)
         (.subscribe "/upnp/services/:usn/eventing"
-                    (fn [req res]
-                      (log/info "Got subscribe request")
-                      (. res (send "Thanks"))))
+                    eventing/handle-subscribe-request)
         (.unsubscribe "/upnp/services/:usn/eventing"
-                      (fn [req res]
-                        (log/info "Got unsubscribe request")
-                        (. res (send "Thanks"))))
+                      eventing/handle-unsubscribe-request)
         (.post "/upnp/services/:usn/control"
                control/handle-control-request))
       (reset! *upnp-http-server* (.listen upnp-app (config/get-value :dulciana-upnp-server-port))))))

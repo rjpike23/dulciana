@@ -10,6 +10,7 @@
             [cljs.core.async :as async]
             [ajax.core :as ajax]
             [taoensso.timbre :as log :include-macros true]
+            [dulciana.service.config :as config]
             [dulciana.service.events :as events]
             [dulciana.service.parser :as parser]
             [os :as os]
@@ -93,7 +94,11 @@
   (log/debug "Subscribe" announcement service)
   (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
                                        (:eventSubURL service)))
-        return-url (str "http://" (-> announcement :local :address) ":" *event-server-port* "/events")]
+        return-url (str "http://"
+                        (config/get-value :dulciana-upnp-server-port) ":" *event-server-port*
+                        "/upnp/services/"
+                        (:usn announcement)
+                        "/eventing")]
      (send-http-request "SUBSCRIBE"
                        (.-hostname req-url)
                        (.-port req-url)
@@ -132,3 +137,7 @@
                         :HOST (str (.-host req-url))}
                        ""
                        nil)))
+
+(defn send-notify-message
+  "Returns a channel."
+  [path port subscription-id event-key body])
