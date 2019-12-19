@@ -33,15 +33,19 @@
 
 ;;; HTTP handlers for descriptors:
 (defn handle-dev-desc-request [req res]
-  (let [dd (@store/find-local-device (.-devid (.-params req)))]
+  (let [dd (store/find-local-device (.-devid (.-params req)))]
     (if dd
-      (. res (send (msg/emit-device-descriptor dd)))
+      (do
+        (. res (type "application/xml"))
+        (. res (send (msg/emit-device-descriptor dd))))
       (. res (sendStatus 404 )))))
 
 (defn handle-scpd-request [req res]
-  (let [svc (@store/find-local-service (.-usn (.-params req)))]
+  (let [svc (store/find-local-service (.-usn (.-params req)))]
     (if svc
-      (. res (send (msg/emit-scpd svc)))
+      (do
+        (. res (type "application/xml"))
+        (. res (send (msg/emit-scpd svc))))
       (. res (sendStatus 404)))))
 
 ;;; HTTP methods for sending requests for descriptors / SOAP requests below:
@@ -98,9 +102,9 @@
   (swap! store/*remote-devices*
          (fn [devs]
             (let [deletes (set (map store/get-dev-id (:delete discovery-updates)))
-                 devs-dels (apply dissoc devs deletes)
-                 adds (set/difference (set (map store/get-dev-id (keys (:add discovery-updates))))
-                                      (set (keys @store/*remote-devices*)))]
+                  devs-dels (apply dissoc devs deletes)
+                  adds (set/difference (set (map store/get-dev-id (keys (:add discovery-updates))))
+                                       (set (keys @store/*remote-devices*)))]
               (into devs-dels (map (fn [k] [k (atom :new)]) adds))))))
 
 (defn start-listeners []

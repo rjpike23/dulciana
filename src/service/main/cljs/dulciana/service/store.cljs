@@ -145,7 +145,7 @@
    (let [dev (find-local-device devid)]
      (when dev
        (let [svcs (:service-list dev)]
-         (some (fn [svc] (= (:service-id svc) svcid))
+         (some (fn [svc] (and (= (:service-id svc) svcid) svc))
                svcs))))))
 
 (defn create-subscription [usn callback statevar timestamp timeout]

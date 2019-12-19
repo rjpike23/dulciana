@@ -183,8 +183,8 @@
       (log/error "Error while starting Dulciana." e))))
 
 (defn teardown
-  ([err]
-   (println err)
+  ([arg1 arg2]
+   (println "Uncaught Exception!" arg1 arg2)
    (teardown))
   ([]
    (try

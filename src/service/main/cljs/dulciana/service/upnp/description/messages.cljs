@@ -211,7 +211,8 @@
 
 (defn emit-scpd-state-var-allowed-value [values]
   (if values
-    (map (partial emit-xml-parameter "allowedValue") values)
+    (str/join "\n"
+              (map (partial emit-xml-parameter "allowedValue") values))
     ""))
 
 (defn emit-scpd-state-var [{allowed-value-list :allowed-value-list

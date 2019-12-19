@@ -4,6 +4,10 @@
 ;  License, v. 2.0. If a copy of the MPL was not distributed with this
 ;  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+(require 'cemerick.pomegranate.aether)
+(cemerick.pomegranate.aether/register-wagon-factory!
+ "http" #(org.apache.maven.wagon.providers.http.HttpWagon.))
+
 (defproject dulciana "0.0.0-SNAPSHOT"
   :description "DLNA server built with Clojurescript, targeted at NodeJS."
   :url "http://www.dulciana.net"
@@ -33,7 +37,7 @@
                  [com.taoensso/timbre "4.10.0"]]
   :plugins [[lein-cljsbuild "1.1.7"]
             [org.clojure/clojurescript "1.10.339"]
-            [lein-figwheel "0.5.16"]]
+            [lein-figwheel "0.5.18"]]
   :clean-targets ^{:protect false} ["target"]
   :cljsbuild {
               :builds [{:id "fig-service"

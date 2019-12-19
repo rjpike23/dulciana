@@ -121,7 +121,8 @@
   (let [announcements (create-root-device-announcements type device)]
     (async/go-loop [a announcements]
       (when a
-        (async/>! @*announcement-queue* (first a))
+        (when (first a)
+          (async/>! @*announcement-queue* (first a)))
         (recur (rest a))))))
 
 (defn start-announcement-queue-processor []
@@ -129,6 +130,7 @@
   (async/go-loop []
     (let [ann (async/<! @*announcement-queue*)]
       (when ann
+        (log/info "Announcement" ann)
         (doseq [addr (keys @*sockets*)]
           (let [loc (str "http://" addr ":" (config/get-value :dulciana-upnp-server-port) (:location ann))]
                                         ; backpatch location with IP address.
