@@ -104,7 +104,7 @@
   [usn]
   (first (str/split usn "::")))
 
-(defn get-svc-id
+(defn get-svc-type
   "Utility function extract the service id from a USN value."
   [usn]
   (second (str/split usn "::")))
@@ -140,12 +140,12 @@
 
 (defn find-local-service
   ([usn]
-   (find-local-service (get-dev-id usn) (get-svc-id usn)))
-  ([devid svcid]
+   (find-local-service (get-dev-id usn) (get-svc-type usn)))
+  ([devid svc-type]
    (let [dev (find-local-device devid)]
      (when dev
        (let [svcs (:service-list dev)]
-         (some (fn [svc] (and (= (:service-id svc) svcid) svc))
+         (some (fn [svc] (and (= (:service-type svc) svc-type) svc))
                svcs))))))
 
 (defn create-subscription [usn callback statevar timestamp timeout]

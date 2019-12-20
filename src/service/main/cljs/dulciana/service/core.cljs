@@ -143,7 +143,7 @@
     (if (= evt-type :dulciana/invoke-action)
       (let [{:keys [device service action form]} (:data args)]
         (async/take! (control/send-control-request (description/get-control-url service)
-                                                   (store/get-svc-id service)
+                                                   (store/get-svc-type service)
                                                    action
                                                    form)
                      (fn [response]

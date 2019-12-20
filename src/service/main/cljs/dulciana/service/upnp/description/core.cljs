@@ -23,7 +23,7 @@
 
 (defn get-control-url [svc-usn]
   (let [ann (@store/*announcements* (store/get-dev-id svc-usn))
-        svc (store/find-service (store/get-dev-id svc-usn) (store/get-svc-id svc-usn))]
+        svc (store/find-service (store/get-dev-id svc-usn) (store/get-svc-type svc-usn))]
      (url/resolve (-> ann :message :headers :location) (:controlURL svc))))
 
 (defn get-event-url [svc-usn]
@@ -78,7 +78,7 @@
       (when (compare-and-set! v :new :pending)
         (async/go
           (when-let [ann (store/find-announcement (store/get-dev-id k))]
-            (when-let [svc (store/find-service (store/get-dev-id k) (store/get-svc-id k))]
+            (when-let [svc (store/find-service (store/get-dev-id k) (store/get-svc-type k))]
               (let [c (request-service-descriptor ann svc)
                     result (async/<! c)]
                 (swap! store/*remote-services* assoc k (:message result))))))))))
