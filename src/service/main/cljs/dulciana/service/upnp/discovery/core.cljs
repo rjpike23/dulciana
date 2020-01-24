@@ -118,7 +118,6 @@
   "Queues 3+2d+k announcements for a device with d embedded devices, and k services."
   [type device search-type]
   (let [announcements (create-root-device-announcements type device)]
-    (log/info "Announcements length" (count announcements))
     (async/go-loop [a announcements]
       (when (seq a)
         (when (first a)
