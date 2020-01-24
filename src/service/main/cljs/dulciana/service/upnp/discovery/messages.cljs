@@ -36,6 +36,7 @@
 (defn emit-notify-msg [scdp-location nts notify-type usn]
   (emit-ssdp-request-msg "NOTIFY" "*"
                          {:host "239.255.255.250:1900"
+                          :cache-control "max-age=1800"
                           :location scdp-location
                           :nt notify-type
                           :nts nts

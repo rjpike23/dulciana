@@ -169,7 +169,7 @@
     (is (some #(= (:usn %) "uuid:test-embedded-device-uuid::test-service-type-0") ann))
     (is (some #(= (:usn %) "uuid:test-device-uuid::test-service-type-1") ann))
     (is (some #(= (:usn %) "uuid:test-device-uuid::test-service-type-2") ann))
-    (is (every? #(= (:location %) "/upnp/devices/test-device-uuid/devDesc.xml") ann))))
+    (is (every? #(= (:location %) "/upnp/devices/uuid:test-device-uuid/devDesc.xml") ann))))
 
 (deftest create-root-device-announcements-nil-test
   (let [ann (discovery/create-root-device-announcements :notify nil)]

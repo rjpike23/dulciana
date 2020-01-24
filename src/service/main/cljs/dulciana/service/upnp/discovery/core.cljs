@@ -59,11 +59,11 @@
   A socket for the interface should have previously
   been opened with start-listener. See nodejs dgram.send()."
   [socket message]
-  (log/info "Sending SSDP message" (.-address (.address socket)) message)
-  (let [fam (.-family (.address socket))]
-    (.send socket message
-           (config/get-value :ssdp-mcast-port)
-           (config/get-value [:ssdp-mcast-addresses fam]))))
+  (let [fam (.-family (.address socket))
+        port (config/get-value :ssdp-mcast-port)
+        address (config/get-value [:ssdp-mcast-addresses fam])]
+    (log/info "Sending SSDP message from" (.-address (.address socket)) "to" address ":" port)
+    (.send socket message port address)))
 
 (defmulti send-announcement (fn [msg iface] (:type msg)))
 
@@ -106,8 +106,7 @@
 (defn create-root-device-announcements [type device]
   (when device
     (let [{udn :udn, device-type :device-type, version :version} device
-          uuid (store/get-uuid udn)
-          loc (str "/upnp/devices/" uuid "/devDesc.xml")]
+          loc (str "/upnp/devices/" udn "/devDesc.xml")]
       (concat (list {:type type
                      :nt "upnp:rootdevice"
                      :usn (str udn "::upnp:rootdevice")
@@ -119,8 +118,9 @@
   "Queues 3+2d+k announcements for a device with d embedded devices, and k services."
   [type device search-type]
   (let [announcements (create-root-device-announcements type device)]
+    (log/info "Announcements length" (count announcements))
     (async/go-loop [a announcements]
-      (when a
+      (when (seq a)
         (when (first a)
           (async/>! @*announcement-queue* (first a)))
         (recur (rest a))))))
@@ -133,7 +133,6 @@
         (log/info "Announcement" ann)
         (doseq [addr (keys @*sockets*)]
           (let [loc (str "http://" addr ":" (config/get-value :dulciana-upnp-server-port) (:location ann))]
-                                        ; backpatch location with IP address.
             (send-announcement (assoc ann :location loc) (@*sockets* addr))))))
     (async/<! (async/timeout (config/get-value :dulciana-upnp-throttle-interval)))
     (when @*ssdp-announcement-flag*
@@ -173,6 +172,7 @@
 
 (defn process-notification [notification]
   (let [notify-type (-> notification :message :headers :nts)]
+    (log/info "Rcvd" notify-type (-> notification :message :headers :location))
     (case notify-type
       "ssdp:alive" (update-announcements store/*announcements* notification)
       "ssdp:update" (update-announcements store/*announcements* notification)
