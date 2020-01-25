@@ -7,7 +7,7 @@
 (ns dulciana.service.config
   (:require [taoensso.timbre :as log :include-macros true]))
 
-(def *default*
+(def +default+
   {:dulciana-port 3000
    :dulciana-upnp-server-enable true
    :dulciana-upnp-server-port 3001
@@ -20,18 +20,18 @@
    :ssdp-protocols {"IPv4" "udp4"
                     "IPv6" "udp6"}})
 
-(defonce *config* (atom *default*))
+(defonce +config+ (atom +default+))
 
 (defn reset-config
-  ([] (reset-config *default*))
-  ([config] (reset! *config* config)))
+  ([] (reset-config +default+))
+  ([config] (reset! +config+ config)))
 
 (defn merge-config [new-config]
-  (swap! *config* merge new-config))
+  (swap! +config+ merge new-config))
 
 (defn get-value [path]
   (if (sequential? path)
-    (get-in @*config* path)
-    (@*config* path)))
+    (get-in @+config+ path)
+    (@+config+ path)))
 
 (defn read-config-string [edn-string])

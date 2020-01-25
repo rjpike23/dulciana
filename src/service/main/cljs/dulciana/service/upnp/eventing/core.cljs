@@ -22,15 +22,15 @@
             [http :as http]))
 
 ;;; HTTP server socket for eventing:
-(defonce *event-server* (atom {}))
+(defonce +event-server+ (atom {}))
 
-(defonce *event-channel* (atom {}))
+(defonce +event-channel+ (atom {}))
 
-(defonce *event-pub* (atom {}))
+(defonce +event-pub+ (atom {}))
 
 (defn update-subscription-state [event]
   (let [sid (-> event :message :headers :sid)]
-    (if (@store/*external-subscriptions* sid)
+    (if (@store/+external-subscriptions+ sid)
       (do
         ; TODO: dispatch event to service specific handler.
         (when (:ok event)
@@ -57,14 +57,14 @@
     (let [sid (-> msg :message :headers :sid)
           delta-ts (js/parseInt (second (re-matches #"Second-(\d*)"
                                                     (-> msg :message :headers :timeout))))]
-      (update-subscriptions store/*external-subscriptions*
+      (update-subscriptions store/+external-subscriptions+
                                   {:sid sid
                                    :expiration (js/Date. (+ (* 1000 delta-ts) (.getTime (js/Date.))))
                                    :dev-id device-id
                                    :svc-id service-id})
       (async/go
         (async/<! (async/timeout (* 1000 (- delta-ts 60)))) ; resub 60s before expiration.
-        (when (@store/*external-subscriptions* sid) ; make sure still subbed.
+        (when (@store/+external-subscriptions+ sid) ; make sure still subbed.
           (resubscribe sid))))
     (log/warn "Error (" (-> msg :message :status-code) ":" (-> msg :message :status-message)
               ") received from subscribe request, dev" device-id "svc" service-id)))
@@ -83,7 +83,7 @@
              (handle-subscribe-response msg device-id service-id))))))))
 
 (defn resubscribe [sub-id]
-  (let [sub (@store/*external-subscriptions* sub-id)
+  (let [sub (@store/+external-subscriptions+ sub-id)
         svc (store/find-service (:dev-id sub) (:svc-id sub))
         ann (store/find-announcement (:dev-id sub))]
     (when (and svc ann)
@@ -93,11 +93,11 @@
             (handle-subscribe-response msg (:dev-id sub) (:svc-id sub))))))))
 
 (defn unsubscribe [sub-id]
-  (let [sub (@store/*external-subscriptions* sub-id)]
+  (let [sub (@store/+external-subscriptions+ sub-id)]
     (net/send-unsubscribe-message (:sid sub)
                                   (store/find-announcement (:dev-id sub))
                                   (store/find-service (:dev-id sub) (:svc-id sub)))
-    (remove-subscriptions store/*external-subscriptions* sub)))
+    (remove-subscriptions store/+external-subscriptions+ sub)))
 
 ;;; Handler for UPNP pub-sub events
 (defn respond [response code message]
@@ -120,7 +120,7 @@
             callback (.get req "CALLBACK")]
         (if (validate-subscribe-request usn statevar timeout callback)
           (let [sub (store/create-subscription usn callback statevar (js/Date.) timeout)]
-            (assoc @store/*internal-subscriptions* (:sid sub) sub)
+            (assoc @store/+internal-subscriptions+ (:sid sub) sub)
             (doto res
               (.set "DATE" (:timestamp sub))
               (.set "SERVER" "FreeBSD/11.0 UPnP/2.0 Dulciana/1.0")
@@ -133,7 +133,7 @@
   (let [usn (.-usn (.-params req))]
     (if (store/find-local-service usn)
       (do
-        (dissoc @store/*internal-subscriptions* usn)
+        (dissoc @store/+internal-subscriptions+ usn)
         (.sendStatus 200))
       (.sendStatus 412))))
 
@@ -153,7 +153,7 @@
                                            :ok #(respond response 200 "OK")
                                            :error (partial respond response)})))]
                (events/slurp c request)
-               (async/pipe c @*event-channel* false))
+               (async/pipe c @+event-channel+ false))
     (do
       (log/warn "Event server ignoring" (.-method request) "request")
       (.writeHead response 405 "Method Not Allowed" (clj->js {"Allow" "NOTIFY"}))
@@ -163,9 +163,9 @@
 (defn start-event-server
   ""
   []
-  (reset! *event-channel* (async/chan 1 (comp (map event-msg/event-parse)
+  (reset! +event-channel+ (async/chan 1 (comp (map event-msg/event-parse)
                                               (map event-msg/event-analyze))))
-  (reset! *event-pub* (async/pub @*event-channel* :type))
+  (reset! +event-pub+ (async/pub @+event-channel+ :type))
   (let [server (.createServer http)
         evt-channels (events/listen* server ["request" "close"])]
     (log/info "Starting event server.")
@@ -177,12 +177,12 @@
     (async/go (async/<! (:close evt-channels))
         (map async/close! (vals evt-channels))
         (log/info "Event server closed."))
-    (.listen server net/*event-server-port*)
-    (reset! *event-server* server)))
+    (.listen server net/+event-server-port+)
+    (reset! +event-server+ server)))
 
 (defn stop-event-server
   ""
   []
-  (when @*event-server*
-    (.close @*event-server*))
-  (async/close! @*event-channel*))
+  (when @+event-server+
+    (.close @+event-server+))
+  (async/close! @+event-channel+))

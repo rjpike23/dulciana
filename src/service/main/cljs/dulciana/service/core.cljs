@@ -34,11 +34,11 @@
 
 (sms/install)
 
-(defonce *event-channel* (atom nil))
-(defonce *event-sender* (atom nil))
-(defonce *event-connections* (atom nil))
-(defonce *http-server* (atom nil))
-(defonce *ws-server* (atom nil))
+(defonce +event-channel+ (atom nil))
+(defonce +event-sender+ (atom nil))
+(defonce +event-connections+ (atom nil))
+(defonce +http-server+ (atom nil))
+(defonce +ws-server+ (atom nil))
 
 (defn template []
   (hiccups/html5 [:html
@@ -78,9 +78,9 @@
         (sente-express/make-express-channel-socket-server!
          {:packer :edn
           :user-id-fn (constantly "DLNA-DB-SERVICE")})]
-    (reset! *event-channel* ch-recv)
-    (reset! *event-sender* send-fn)
-    (reset! *event-connections* connected-uids)
+    (reset! +event-channel+ ch-recv)
+    (reset! +event-sender+ send-fn)
+    (reset! +event-connections+ connected-uids)
     s))
 
 (defn start-express-server! [event-mgr]
@@ -100,19 +100,19 @@
       (.get "/api/upnp/announcements"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str @store/*announcements*)))))
+              (. res (send (pr-str @store/+announcements+)))))
       (.get "/api/upnp/devices"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @store/*remote-devices*))))))
+              (. res (send (pr-str (filter-pending @store/+remote-devices+))))))
       (.get "/api/upnp/services"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending @store/*remote-services*))))))
+              (. res (send (pr-str (filter-pending @store/+remote-services+))))))
       (.get "/api/upnp/services/:svcid"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
-              (. res (send (pr-str (filter-pending (@store/*remote-services* (.-svcid (.-params req)))))))))
+              (. res (send (pr-str (filter-pending (@store/+remote-services+ (.-svcid (.-params req)))))))))
       (.ws "/api/upnp/updates"
            (fn [ws req next]
              ((:ajax-get-or-ws-handshake-fn event-mgr) req nil nil{:websocket? true
@@ -131,8 +131,8 @@
       (.get "/"
             (fn [req res]
               (. res (redirect "/upnp/devices")))))
-    (reset! *http-server* (.listen express-app (config/get-value :dulciana-port)))
-    (reset! *ws-server* express-ws-app)))
+    (reset! +http-server+ (.listen express-app (config/get-value :dulciana-port)))
+    (reset! +ws-server+ express-ws-app)))
 
 (defn sente-router [ch hndlr]
   (events/channel-driver ch hndlr))
@@ -155,7 +155,7 @@
                                             :response response}))))))))
 
 (defn send-event [msg]
-  (@*event-sender* "DLNA-DB-SERVICE" msg))
+  (@+event-sender+ "DLNA-DB-SERVICE" msg))
 
 (defn send-db-update [tag data]
   (send-event [tag {:data data}]))
@@ -166,16 +166,16 @@
   (try
     (upnp/start-upnp-services)
     (start-express-server! (start-sente!))
-    (sente-router @*event-channel* sente-event-handler)
-    (add-watch store/*announcements* :update
+    (sente-router @+event-channel+ sente-event-handler)
+    (add-watch store/+announcements+ :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-announcements new))))
-    (add-watch store/*remote-devices* :update
+    (add-watch store/+remote-devices+ :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-devices (filter-pending new)))))
-    (add-watch store/*remote-services* :update
+    (add-watch store/+remote-services+ :update
                (fn [key atom old new]
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-services (filter-pending new)))))
@@ -188,12 +188,12 @@
    (teardown))
   ([]
    (try
-     (remove-watch store/*announcements* :update)
-     (remove-watch store/*remote-devices* :update)
-     (remove-watch store/*remote-services* :update)
+     (remove-watch store/+announcements+ :update)
+     (remove-watch store/+remote-devices+ :update)
+     (remove-watch store/+remote-services+ :update)
      (upnp/stop-upnp-services)
-     (when @*http-server* (.close @*http-server*))
-     (when @*event-channel*) (async/close! @*event-channel*)
+     (when @+http-server+ (.close @+http-server+))
+     (when @+event-channel+) (async/close! @+event-channel+)
      (catch :default e
        (log/error "Error shutting down Dulciana." e)))))
 

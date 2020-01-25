@@ -12,7 +12,7 @@
   (:import [goog History]
            [goog.history Html5History EventType]))
 
-(defonce *history*
+(defonce +history+
   (doto (Html5History.)
     (.setUseFragment false)
     (goog-events/listen EventType.NAVIGATE #(secretary/dispatch! (str (.-token %))))

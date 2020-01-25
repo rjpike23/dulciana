@@ -8,11 +8,11 @@
   (:require [taoensso.sente :as sente]
             [re-frame.core :as rf]))
 
-(defonce *event-channel* (atom nil))
-(defonce *event-sender* (atom nil))
+(defonce +event-channel+ (atom nil))
+(defonce +event-sender+ (atom nil))
 
 (defn send-event [msg & [timeout-ms callback]]
-  (@*event-sender* msg timeout-ms callback))
+  (@+event-sender+ msg timeout-ms callback))
 
 (defn dispatch-response [event response]
   (rf/dispatch [event response]))
@@ -41,5 +41,5 @@
   (let [{:keys [chsk ch-recv send-fn state] :as s}
         (sente/make-channel-socket-client! "/api/upnp/updates" {:type :auto :packer :edn})]
     (sente/start-client-chsk-router! ch-recv event-msg-handler)
-    (reset! *event-channel* ch-recv)
-    (reset! *event-sender* send-fn)))
+    (reset! +event-channel+ ch-recv)
+    (reset! +event-sender+ send-fn)))

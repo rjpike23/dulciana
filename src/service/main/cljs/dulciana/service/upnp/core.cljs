@@ -19,7 +19,7 @@
             [dulciana.service.upnp.description.core :as description]
             [dulciana.service.upnp.eventing.core :as eventing]))
 
-(defonce *upnp-http-server* (atom nil))
+(defonce +upnp-http-server+ (atom nil))
 
 (defn start-upnp-http-server! []
   (when (config/get-value :dulciana-upnp-server-enable)
@@ -37,19 +37,19 @@
                       eventing/handle-unsubscribe-request)
         (.post "/upnp/services/:usn/control"
                control/handle-control-request))
-      (reset! *upnp-http-server* (.listen upnp-app (config/get-value :dulciana-upnp-server-port))))))
+      (reset! +upnp-http-server+ (.listen upnp-app (config/get-value :dulciana-upnp-server-port))))))
 
 (defn stop-upnp-http-server! []
-  (when @*upnp-http-server*
-    (.close @*upnp-http-server*)))
+  (when @+upnp-http-server+
+    (.close @+upnp-http-server+)))
  
 (defn register-device [device-descriptor]
-  (swap! store/*local-devices* assoc (:udn device-descriptor) device-descriptor)
+  (swap! store/+local-devices+ assoc (:udn device-descriptor) device-descriptor)
   (discovery/queue-device-announcements :notify device-descriptor nil))
 
 (defn deregister-devices [devid]
-  (when-let [device (@store/*local-devices* devid)]
-    (swap! store/*local-devices* dissoc devid)
+  (when-let [device (@store/+local-devices+ devid)]
+    (swap! store/+local-devices+ dissoc devid)
     (discovery/queue-device-announcements :goodbye device nil)))
 
 (defn start-upnp-services []

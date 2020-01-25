@@ -13,31 +13,31 @@
   :url "http://www.dulciana.net"
   :license {:name "Mozilla Public License, v 2.0"
             :url "http://mozilla.org/MPL/2.0/"}
-  :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/clojurescript "1.10.339"]
-                 [org.clojure/core.async "0.4.474"]
-                 [org.clojure/test.check "0.9.0"]
-                 [org.clojure/data.xml "0.2.0-alpha5"]
-                 [binaryage/devtools "0.9.10"]
+  :dependencies [[org.clojure/clojure "1.10.1"]
+                 [org.clojure/clojurescript "1.10.597"]
+                 [org.clojure/core.async "0.7.559"]
+                 [org.clojure/test.check "0.10.0"]
+                 [org.clojure/data.xml "0.2.0-alpha6"]
+                 [binaryage/devtools "0.9.11"]
                  [lein-cljsbuild "1.1.7"]
                  [com.cemerick/url "0.1.1"]
-                 [lein-figwheel "0.5.18"]
-                 [figwheel-sidecar "0.5.18"]
-                 [instaparse "1.4.8"]
-                 [reagent "0.8.1"]
-                 [re-frame "0.10.6"]
-                 [day8.re-frame/http-fx "0.1.6"]
-                 [day8.re-frame/re-frame-10x "0.3.3"]
-                 [org.roman01la/cljss "1.6.3"]
-                 [secretary "1.2.3"]
+                 [lein-figwheel "0.5.19"]
+                 [figwheel-sidecar "0.5.19"]
+                 [instaparse "1.4.10"]
+                 [reagent "0.9.1"]
+                 [re-frame "0.11.0"]
+                 [day8.re-frame/http-fx "v0.2.0"]
+                 [day8.re-frame/re-frame-10x "0.4.5"]
+                 [clj-commons/cljss "1.6.4"]
+                 [clj-commons/secretary "1.2.4"]
                  [macchiato/hiccups "0.4.1"]
-                 [cljs-ajax "0.7.5"]
+                 [cljs-ajax "0.8.0"]
                  [funcool/tubax "0.2.0"]
-                 [com.taoensso/sente "1.13.1"]
+                 [com.taoensso/sente "1.15.0"]
                  [com.taoensso/timbre "4.10.0"]]
   :plugins [[lein-cljsbuild "1.1.7"]
-            [org.clojure/clojurescript "1.10.339"]
-            [lein-figwheel "0.5.18"]]
+            [org.clojure/clojurescript "1.10.597"]
+            [lein-figwheel "0.5.19"]]
   :clean-targets ^{:protect false} ["target"]
   :cljsbuild {
               :builds [{:id "fig-service"
@@ -50,16 +50,16 @@
                                     :optimizations :none
                                     :source-map true
                                     :install-deps true
-                                    :npm-deps {:express "4.15.3"
+                                    :npm-deps {:express "4.17.1"
                                                :express-ws "4.0.0"
-                                               :body-parser "1.18.3"
-                                               :cookie-parser "1.4.3"
-                                               :express-session "1.15.6"
-                                               :csurf "1.9.0"
-                                               :source-map-support "0.5.0"
-                                               :ws "3.2.0"
-                                               :sax "1.2.2"
-                                               :xmldom "0.1.27"
+                                               :body-parser "1.19.0"
+                                               :cookie-parser "1.4.4"
+                                               :express-session "1.17.0"
+                                               :csurf "1.11.0"
+                                               :source-map-support "0.5.16"
+                                               :ws "7.2.1"
+                                               :sax "1.2.4"
+                                               :xmldom "0.2.1"
                                                :xmlhttprequest "1.8.0"}}}
                        {:id "fig-client"
                         :source-paths ["src/client/main/cljs" "src/client/test/cljs"]
@@ -74,6 +74,6 @@
                                    :optimizations :none
                                    :source-map true
                                    :install-deps true
-                                   :npm-deps {:websocket "1.0.28"}}}]}
+                                   :npm-deps {:websocket "1.0.31"}}}]}
   :figwheel {}
   :repl-options {:nrepl-middleware [cider.piggieback/wrap-cljs-repl]})

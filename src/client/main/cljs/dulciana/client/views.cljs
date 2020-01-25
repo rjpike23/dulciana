@@ -25,7 +25,7 @@
     [:div.col-12.col-sm-6.col-md-4.col-lg-3 {:class (dc-card)}
      [:div.card {:key (-> device :device :UDN)}
       [:button.card-title.btn.btn-primary
-       {:on-click #(.setToken routes/*history* (str "upnp/device/" (-> device :device :UDN)))}
+       {:on-click #(.setToken routes/+history+ (str "upnp/device/" (-> device :device :UDN)))}
        (-> device :device :friendlyName)]
       [:h6.card-subtitle (-> device :device :modelDescription)]
       [:dl.card-body
@@ -48,7 +48,7 @@
   [:div.col-12.col-sm-12.col-md-6.col-lg-4
    [:div.card {:key (:serviceId svc)}
     [:button.card-title.btn.btn-primary
-     {:on-click #(.setToken routes/*history* (str "upnp/device/" (:UDN device)
+     {:on-click #(.setToken routes/+history+ (str "upnp/device/" (:UDN device)
                                                   "/service/" (:serviceId svc)))}
      (:serviceId svc)]
     [:dl.card-body
@@ -82,7 +82,7 @@
        [:li.breadcrumb-item [:a {:href "#"
                                  :on-click (fn [evt]
                                              (.preventDefault evt)
-                                             (.setToken routes/*history* "upnp/devices"))}
+                                             (.setToken routes/+history+ "upnp/devices"))}
                              "All Devices"]]
        [:li.breadcrumb-item.active (-> @dev :dev :friendlyName)]]]
      [device-details-view dev]]))
@@ -166,12 +166,12 @@
        [:li.breadcrumb-item [:a {:href "#"
                                  :on-click (fn [evt]
                                              (.preventDefault evt)
-                                             (.setToken routes/*history* "upnp/devices"))}
+                                             (.setToken routes/+history+ "upnp/devices"))}
                              "All Devices"]]
        [:li.breadcrumb-item [:a {:href "#"
                                :on-click (fn [evt]
                                            (.preventDefault evt)
-                                           (.setToken routes/*history* (str "upnp/device/" (-> @dev :dev :UDN))))}
+                                           (.setToken routes/+history+ (str "upnp/device/" (-> @dev :dev :UDN))))}
                              (-> @dev :dev :friendlyName)]]
        [:li.breadcrumb-item.active (last (str/split @svc-id ":"))]]]
      [service-actions-view svc]

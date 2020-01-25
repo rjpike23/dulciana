@@ -75,28 +75,29 @@
      usn])
 
 (defprotocol upnp-service
+  (get-descriptor [this])
   (get-state-atom [this])
   (invoke-action [this action-name args]))
 
-(defonce *external-subscriptions* (atom {}))
+(defonce +external-subscriptions+ (atom {}))
 
-(defonce *internal-subscriptions* (atom {}))
+(defonce +internal-subscriptions+ (atom {}))
 
 ;;; A map of all received announcements.
-(defonce *announcements* (atom {}))
+(defonce +announcements+ (atom {}))
 
-;;; A core.async/pub of updates to the *announcements* atom.
-(defonce *announcements-pub* (events/wrap-atom *announcements*))
+;;; A core.async/pub of updates to the +announcements+ atom.
+(defonce +announcements-pub+ (events/wrap-atom +announcements+))
 
-(defonce *remote-devices* (atom {}))
+(defonce +remote-devices+ (atom {}))
 
-(defonce *remote-devices-pub* (events/wrap-atom *remote-devices*))
+(defonce +remote-devices-pub+ (events/wrap-atom +remote-devices+))
 
-(defonce *remote-services* (atom {}))
+(defonce +remote-services+ (atom {}))
 
-(defonce *remote-services-pub* (events/wrap-atom *remote-services*))
+(defonce +remote-services-pub+ (events/wrap-atom +remote-services+))
 
-(defonce *local-devices* (atom (config/get-value :dulciana-init-local-devices)))
+(defonce +local-devices+ (atom (config/get-value :dulciana-init-local-devices)))
 
 (defn create-usn
   "Constructs a USN from the device id and service id."
@@ -122,11 +123,11 @@
 
 (defn find-announcement [dev-id]
   (some (fn [[k v]] (when (str/starts-with? k dev-id) v))
-        @*announcements*))
+        @+announcements+))
 
 (defn find-device [dev-id]
   (some (fn [[k v]] (and (= (get-dev-id k) dev-id) v))
-        @*remote-devices*))
+        @+remote-devices+))
 
 (defn find-service [dev-id svc-id]
   (let [dev (find-device dev-id)]
@@ -139,10 +140,10 @@
        (-> (find-device dev-id) :device :serviceList)))
 
 (defn find-scpd [svc-usn]
-  (@*remote-services* svc-usn))
+  (@+remote-services+ svc-usn))
 
 (defn find-local-device [devid]
-  (@*local-devices* devid))
+  (@+local-devices+ devid))
 
 (defn find-local-service
   ([usn]

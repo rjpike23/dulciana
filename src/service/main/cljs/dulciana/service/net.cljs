@@ -19,7 +19,7 @@
             [net :as net]
             [url :as url]))
 
-(def *event-server-port* 3200)
+(def +event-server-port+ 3200)
 
 (defn get-ifaces
   "Returns a list of active external network interfaces. See nodejs os.networkInterfaces()."
@@ -95,7 +95,7 @@
   (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
                                        (:eventSubURL service)))
         return-url (str "http://"
-                        (config/get-value :dulciana-upnp-server-port) ":" *event-server-port*
+                        (config/get-value :dulciana-upnp-server-port) ":" +event-server-port+
                         "/upnp/services/"
                         (:usn announcement)
                         "/eventing")]

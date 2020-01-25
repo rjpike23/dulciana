@@ -14,7 +14,7 @@
             [dulciana.service.store :as store]
             [dulciana.service.upnp.discovery.core :as discovery]))
 
-(def *expired-announcement*
+(def +expired-announcement+
   {:remote
    {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
    :interface
@@ -32,7 +32,7 @@
     :body nil}
    :expiration (js/Date. 0)})
 
-(def *valid-announcement*
+(def +valid-announcement+
   {:remote
    {:address "127.0.0.1" :family "IPv4" :port 1900 :size 1000}
    :interface
@@ -50,9 +50,9 @@
     :body nil}
    :expiration (js/Date. 10000000000000)})
 
-(def *announcements*
-  {"uuid:abc::123" *expired-announcement*
-   "uuid:abd::124" *valid-announcement*})
+(def +announcements+
+  {"uuid:abc::123" +expired-announcement+
+   "uuid:abd::124" +valid-announcement+})
 
 (defn create-sock-mock [bind-fn add-m-fn send-fn close-fn address-fn]
   (let [sock-mock (js/Object.create (node-events/EventEmitter.))]
@@ -64,21 +64,21 @@
     sock-mock))
 
 (deftest remove-expired
-  (is (= {"uuid:abd::124" *valid-announcement*}
-         (discovery/remove-expired-items *announcements*))))
+  (is (= {"uuid:abd::124" +valid-announcement+}
+         (discovery/remove-expired-items +announcements+))))
 
 (deftest remove-announcement
   (is (= {}
-         (discovery/remove-announcements (atom *announcements*) *valid-announcement*)))
-  (is (= {"uuid:abd::124" *valid-announcement*}
-         (discovery/remove-announcements (atom *announcements*) *expired-announcement*))))
+         (discovery/remove-announcements (atom +announcements+) +valid-announcement+)))
+  (is (= {"uuid:abd::124" +valid-announcement+}
+         (discovery/remove-announcements (atom +announcements+) +expired-announcement+))))
 
 (deftest start-listener-test
   (let [iface {:family "IPv4" :address "1.2.3.4" :port 123}
         calls (atom #{})
         bind-fn (fn [& args]
                   (swap! calls conj :bind)
-                  (is (= (:ssdp-mcast-port @config/*config*) (first args)))
+                  (is (= (:ssdp-mcast-port @config/+config+) (first args)))
                   (is (or (= 1 (count args)) (= (:address iface) (second args))))
                   nil)
         add-m-fun (fn [& args]

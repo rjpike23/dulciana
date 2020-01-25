@@ -15,19 +15,19 @@
             [dulciana.service.upnp.description.messages :as msg]
             [dulciana.service.upnp.discovery.core :as discovery]))
 
-(defonce *announcements-sub* (atom nil))
+(defonce +announcements-sub+ (atom nil))
 
-(defonce *remote-devices-sub* (atom nil))
+(defonce +remote-devices-sub+ (atom nil))
 
-(defonce *remote-services-sub* (atom nil))
+(defonce +remote-services-sub+ (atom nil))
 
 (defn get-control-url [svc-usn]
-  (let [ann (@store/*announcements* (store/get-dev-id svc-usn))
+  (let [ann (@store/+announcements+ (store/get-dev-id svc-usn))
         svc (store/find-service (store/get-dev-id svc-usn) (store/get-svc-type svc-usn))]
      (url/resolve (-> ann :message :headers :location) (:controlURL svc))))
 
 (defn get-event-url [svc-usn]
-  (let [ann (@store/*announcements* (store/get-dev-id svc-usn))
+  (let [ann (@store/+announcements+ (store/get-dev-id svc-usn))
         scpd (store/find-scpd svc-usn)]
     (url/resolve (-> ann :message :headers :location) (:eventSubURL scpd))))
 
@@ -73,7 +73,7 @@
                                (map msg/analyze-descriptor))))))
 
 (defn process-remote-services-updates [updates]
-  (doseq [[k v] @store/*remote-services*]
+  (doseq [[k v] @store/+remote-services+]
     (when (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
@@ -81,47 +81,47 @@
             (when-let [svc (store/find-service (store/get-dev-id k) (store/get-svc-type k))]
               (let [c (request-service-descriptor ann svc)
                     result (async/<! c)]
-                (swap! store/*remote-services* assoc k (:message result))))))))))
+                (swap! store/+remote-services+ assoc k (:message result))))))))))
 
 (defn process-remote-devices-updates [updates]
-   (doseq [[k v] @store/*remote-devices*] ; ignore the updates param, go direct to *r-d*
+   (doseq [[k v] @store/+remote-devices+] ; ignore the updates param, go direct to +r-d+
      (if (= (type v) Atom)
       (when (compare-and-set! v :new :pending)
         (async/go
           (when-let [ann (store/find-announcement k)]
             (let [c (request-device-descriptor ann)
                   result (async/<! c)]
-              (swap! store/*remote-devices* assoc k (:message result))))))
-      (swap! store/*remote-services*
+              (swap! store/+remote-devices+ assoc k (:message result))))))
+      (swap! store/+remote-services+
              (fn [svcs]
                (merge (into {} (map (fn [s] [(store/create-usn k (:serviceId s)) (atom :new)])
                                     (-> v :device :serviceList)))
                       svcs))))))
 
 (defn process-discovery-updates [discovery-updates]
-  (swap! store/*remote-devices*
+  (swap! store/+remote-devices+
          (fn [devs]
             (let [deletes (set (map store/get-dev-id (:delete discovery-updates)))
                   devs-dels (apply dissoc devs deletes)
                   adds (set/difference (set (map store/get-dev-id (keys (:add discovery-updates))))
-                                       (set (keys @store/*remote-devices*)))]
+                                       (set (keys @store/+remote-devices+)))]
               (into devs-dels (map (fn [k] [k (atom :new)]) adds))))))
 
 (defn start-listeners []
-  (reset! *announcements-sub* (async/chan))
-  (reset! *remote-devices-sub* (async/chan))
-  (reset! *remote-services-sub* (async/chan))
-  (async/sub store/*announcements-pub* :update @*announcements-sub*)
-  (events/channel-driver @*announcements-sub* process-discovery-updates)
-  (async/sub store/*remote-devices-pub* :update @*remote-devices-sub*)
-  (events/channel-driver @*remote-devices-sub* process-remote-devices-updates)
-  (async/sub store/*remote-services-pub* :update @*remote-services-sub*)
-  (events/channel-driver @*remote-services-sub* process-remote-services-updates))
+  (reset! +announcements-sub+ (async/chan))
+  (reset! +remote-devices-sub+ (async/chan))
+  (reset! +remote-services-sub+ (async/chan))
+  (async/sub store/+announcements-pub+ :update @+announcements-sub+)
+  (events/channel-driver @+announcements-sub+ process-discovery-updates)
+  (async/sub store/+remote-devices-pub+ :update @+remote-devices-sub+)
+  (events/channel-driver @+remote-devices-sub+ process-remote-devices-updates)
+  (async/sub store/+remote-services-pub+ :update @+remote-services-sub+)
+  (events/channel-driver @+remote-services-sub+ process-remote-services-updates))
 
 (defn stop-listeners []
-  (async/unsub store/*remote-services-pub* :update @*remote-services-sub*)
-  (when @*remote-services-sub* (async/close! @*remote-services-sub*))
-  (async/unsub store/*remote-devices-pub* :update @*remote-devices-sub*)
-  (when @*remote-devices-sub* (async/close! @*remote-devices-sub*))
-  (async/unsub store/*announcements-pub* :update @*announcements-sub*)
-  (when @*announcements-sub* (async/close! @*announcements-sub*)))
+  (async/unsub store/+remote-services-pub+ :update @+remote-services-sub+)
+  (when @+remote-services-sub+ (async/close! @+remote-services-sub+))
+  (async/unsub store/+remote-devices-pub+ :update @+remote-devices-sub+)
+  (when @+remote-devices-sub+ (async/close! @+remote-devices-sub+))
+  (async/unsub store/+announcements-pub+ :update @+announcements-sub+)
+  (when @+announcements-sub+ (async/close! @+announcements-sub+)))

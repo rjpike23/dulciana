@@ -11,7 +11,7 @@
             [taoensso.timbre :as log :include-macros true]
             [dulciana.service.upnp.discovery.messages :as messages]))
 
-(def *notify-msg*
+(def +notify-msg+
   (str/join "\r\n"
             ["NOTIFY * HTTP/1.1"
              "HOST: 239.255.255.250:1900"
@@ -22,7 +22,7 @@
              "SERVER: OS/1.0 UPnP/2.0 product/1.0"
              "USN: uuid:00000000-0000-0000-0000-000000000000\r\n\r\n"]))
 
-(def *search-msg*
+(def +search-msg+
   (str/join "\r\n"
             ["M-SEARCH * HTTP/1.1"
              "HOST: 239.255.255.250:1900"
@@ -30,7 +30,7 @@
              "ST: sddp:all"
              "USER-AGENT: OS/1.0 UPnP/2.0 product/1.0\r\n\r\n"]))
 
-(def *response-msg*
+(def +response-msg+
   (str/join "\r\n"
             ["HTTP/1.1 200 OK"
              "CACHE-CONTROL: max-age = 50000"
@@ -41,29 +41,29 @@
              "ST: ssdp:all"
              "USN: uuid:00000000-0000-0000-0000-000000000000\r\n\r\n"]))
 
-(def *accept-malformed-msg*
+(def +accept-malformed-msg+
   (str/join "\r\n"
             ["HTTP/1.1 200 OK"
              "A-HEADER: value"]))
 
-(def *illegal-msg* "I am not a valid SSDP message")
+(def +illegal-msg+ "I am not a valid SSDP message")
 
 ;; The format of the parser output is subject to change with the grammar, thus,
 ;; there are no assertions on the content of the return value.
 (deftest test-parse
-  (is (not (nil? (messages/ssdp-parse {:message *notify-msg*}))))
-  (is (not (nil? (messages/ssdp-parse {:message *search-msg*}))))
-  (is (not (nil? (messages/ssdp-parse {:message *response-msg*}))))
-  (is (not (nil? (messages/ssdp-parse {:message *accept-malformed-msg*}))))
-  (is (:error (messages/ssdp-parse {:message *illegal-msg*}))))
+  (is (not (nil? (messages/ssdp-parse {:message +notify-msg+}))))
+  (is (not (nil? (messages/ssdp-parse {:message +search-msg+}))))
+  (is (not (nil? (messages/ssdp-parse {:message +response-msg+}))))
+  (is (not (nil? (messages/ssdp-parse {:message +accept-malformed-msg+}))))
+  (is (:error (messages/ssdp-parse {:message +illegal-msg+}))))
 
 (deftest test-analyze
-  (let [notify-result (messages/ssdp-analyzer (messages/ssdp-parse {:message *notify-msg*
+  (let [notify-result (messages/ssdp-analyzer (messages/ssdp-parse {:message +notify-msg+
                                                                     :timestamp (js/Date. 0)}))]
     (is (= :NOTIFY (:type notify-result)))
     (is (= "239.255.255.250:1900" (-> notify-result :message :headers :host)))
     (is (:expiration notify-result))))
 
 (deftest test-analyze-error
-  (let [err-result (messages/ssdp-analyzer (messages/ssdp-parse {:message *illegal-msg*}))]
+  (let [err-result (messages/ssdp-analyzer (messages/ssdp-parse {:message +illegal-msg+}))]
     (is (= :error (:type err-result)))))

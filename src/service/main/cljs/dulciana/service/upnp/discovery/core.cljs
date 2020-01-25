@@ -18,30 +18,30 @@
             [dulciana.service.parser :as parser]
             [dulciana.service.store :as store]))
 
-(defonce *ssdp-announcement-flag* (atom nil))
+(defonce +ssdp-announcement-flag+ (atom nil))
 
 ;;; SSDP module state vars:
 ;;; Map of open sockets:
-(defonce *sockets* (atom {}))
+(defonce +sockets+ (atom {}))
 
 ;;; Publication of SSDP messages
-(defonce *ssdp-pub* (atom nil))
+(defonce +ssdp-pub+ (atom nil))
 
 ;;; A queue of announcements to be sent by this server.
-(defonce *announcement-queue* (atom (async/chan)))
+(defonce +announcement-queue+ (atom (async/chan)))
 
 (defn expired? [now [key ann]]
   (< (:expiration ann) now))
 
 (defn get-announced-device-ids
   ([]
-   (get-announced-device-ids @store/*announcements*))
+   (get-announced-device-ids @store/+announcements+))
   ([announcement-map]
    (set (map (fn [[k v]] (store/get-dev-id k)) announcement-map))))
 
 (defn get-announced-services-for-device
   ([dev-id]
-   (get-announced-services-for-device dev-id @store/*announcements*))
+   (get-announced-services-for-device dev-id @store/+announcements+))
   ([dev-id announcement-map]
    (set (map (fn [[k v]] k)
              (filter (fn [[k v]] (str/starts-with? k dev-id))
@@ -121,34 +121,34 @@
     (async/go-loop [a announcements]
       (when (seq a)
         (when (first a)
-          (async/>! @*announcement-queue* (first a)))
+          (async/>! @+announcement-queue+ (first a)))
         (recur (rest a))))))
 
 (defn start-announcement-queue-processor []
-  (reset! *ssdp-announcement-flag* true)
+  (reset! +ssdp-announcement-flag+ true)
   (async/go-loop []
-    (let [ann (async/<! @*announcement-queue*)]
+    (let [ann (async/<! @+announcement-queue+)]
       (when ann
         (log/info "Announcement" ann)
-        (doseq [addr (keys @*sockets*)]
+        (doseq [addr (keys @+sockets+)]
           (let [loc (str "http://" addr ":" (config/get-value :dulciana-upnp-server-port) (:location ann))]
-            (send-announcement (assoc ann :location loc) (@*sockets* addr))))))
+            (send-announcement (assoc ann :location loc) (@+sockets+ addr))))))
     (async/<! (async/timeout (config/get-value :dulciana-upnp-throttle-interval)))
-    (when @*ssdp-announcement-flag*
+    (when @+ssdp-announcement-flag+
       (recur))))
 
 (defn start-notifications []
   (async/go-loop []
-    (doseq [device (vals @store/*local-devices*)]
+    (doseq [device (vals @store/+local-devices+)]
       (queue-device-announcements :notify device nil))
     (async/<! (async/timeout (config/get-value :dulciana-upnp-announcement-interval)))
-    (if @*ssdp-announcement-flag*
+    (if @+ssdp-announcement-flag+
       (recur)
-      (doseq [device (vals @store/*local-devices*)]
+      (doseq [device (vals @store/+local-devices+)]
         (queue-device-announcements :goodbye device nil)))))
 
 (defn stop-notifications []
-  (reset! *ssdp-announcement-flag* false))
+  (reset! +ssdp-announcement-flag+ false))
 
 (defn remove-expired-items [items]
   (into {} (filter (comp not (partial expired? (js/Date.))) items)))
@@ -173,13 +173,13 @@
   (let [notify-type (-> notification :message :headers :nts)]
     (log/info "Rcvd" notify-type (-> notification :message :headers :location))
     (case notify-type
-      "ssdp:alive" (update-announcements store/*announcements* notification)
-      "ssdp:update" (update-announcements store/*announcements* notification)
-      "ssdp:byebye" (remove-announcements store/*announcements* notification)
+      "ssdp:alive" (update-announcements store/+announcements+ notification)
+      "ssdp:update" (update-announcements store/+announcements+ notification)
+      "ssdp:byebye" (remove-announcements store/+announcements+ notification)
       (log/warn "Ignoring announcement type" notify-type))))
 
 (defn process-ssdp-response [response]
-  (update-announcements store/*announcements* response))
+  (update-announcements store/+announcements+ response))
 
 (defn start-listener
   "Starts an SSDP listener on the specified interface. Returns a map with two entries,
@@ -197,7 +197,7 @@
                  (fn [[this]]
                    (log/debug "Socket closed" (:address iface))
                    (events/close* channels)
-                   (swap! *sockets* dissoc (:address iface))))
+                   (swap! +sockets+ dissoc (:address iface))))
     (async/take! (:error channels)
                  (fn [[this err :as msg]]
                    (when msg
@@ -210,7 +210,7 @@
                      (try
                        (net/add-membership sock
                                            (config/get-value [:ssdp-mcast-addresses family]) address)
-                       (swap! *sockets* assoc address socket)
+                       (swap! +sockets+ assoc address socket)
                        (send-announcement {:type :search} socket)
                        (catch :default err
                          (log/error err "Error joining multicast group on" address))))))
@@ -234,13 +234,13 @@
                                   (filter (fn [[k v]] v)
                                           (net/get-ifaces))))
                 ssdp-chan)
-    (reset! *ssdp-pub* (async/pub ssdp-chan :type)))
-  (events/channel-driver (async/sub @*ssdp-pub* :NOTIFY (async/chan)) process-notification)
-  (events/channel-driver (async/sub @*ssdp-pub* :RESPONSE (async/chan)) process-ssdp-response))
+    (reset! +ssdp-pub+ (async/pub ssdp-chan :type)))
+  (events/channel-driver (async/sub @+ssdp-pub+ :NOTIFY (async/chan)) process-notification)
+  (events/channel-driver (async/sub @+ssdp-pub+ :RESPONSE (async/chan)) process-ssdp-response))
 
 (defn stop-listeners
   ([]
-   (stop-listeners @*sockets*))
+   (stop-listeners @+sockets+))
   ([sockets]
    (doseq [[k socket] sockets]
      (.close socket))))
