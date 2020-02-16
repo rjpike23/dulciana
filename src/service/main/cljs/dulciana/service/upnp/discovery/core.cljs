@@ -137,15 +137,18 @@
     (when @+ssdp-announcement-flag+
       (recur))))
 
+(defn stop-announcement-queue-processor []
+  (reset! +ssdp-announcement-flag+ false))
+
 (defn start-notifications []
   (async/go-loop []
     (doseq [device (vals @store/+local-devices+)]
-      (queue-device-announcements :notify device nil))
+      (queue-device-announcements :notify (store/get-descriptor device) nil))
     (async/<! (async/timeout (config/get-value :dulciana-upnp-announcement-interval)))
     (if @+ssdp-announcement-flag+
       (recur)
       (doseq [device (vals @store/+local-devices+)]
-        (queue-device-announcements :goodbye device nil)))))
+        (queue-device-announcements :goodbye (store/get-descriptor device) nil)))))
 
 (defn stop-notifications []
   (reset! +ssdp-announcement-flag+ false))

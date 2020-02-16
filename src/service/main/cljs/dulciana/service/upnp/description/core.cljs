@@ -37,7 +37,7 @@
     (if dd
       (do
         (. res (type "application/xml"))
-        (. res (send (msg/emit-device-descriptor dd))))
+        (. res (send (msg/emit-device-descriptor (store/get-descriptor dd)))))
       (. res (sendStatus 404 )))))
 
 (defn handle-scpd-request [req res]

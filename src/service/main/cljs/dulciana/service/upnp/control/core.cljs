@@ -10,7 +10,8 @@
             [tubax.helpers :as xml-util]
             [dulciana.service.net :as net]
             [dulciana.service.store :as store]
-            [dulciana.service.upnp.control.messages :as msg]))
+            [dulciana.service.upnp.control.messages :as msg]
+            [util :as util]))
 
 (defn send-control-request [url service-type action-name params]
   (let [result-chan (async/chan 1 (comp (map msg/control-response-parse)
@@ -18,21 +19,20 @@
         msg (msg/emit-control-request service-type action-name params)
         hdrs {"USER-AGENT" "Unix/5.0 UPnP/2.0 dulciana/1.0"
               "SOAPACTION" (str "\"" service-type "#" action-name "\"")}]
-    (log/info "send-control-request" url service-type action-name params msg hdrs)
     (async/pipe (net/send-http-request "POST" url hdrs msg {}) result-chan)))
 
 (defn handle-control-request [req res]
   (let [usn (.-usn (.-params req))
         parsed-req (msg/control-request-parse (.-body req))
-        elt (-> parsed-req :content :content :tag)
+        elt (-> parsed-req :content first :content first :tag)
         params (into {}
                      (map (fn [x] [(:tag x) (xml-util/text x)])
                           (-> parsed-req :content :content :content)))]
     (if (and parsed-req elt params)
       (let [action-name (first elt)
             svc-type (second elt)
-            svc (store/find-local-service usn)
-            result (store/invoke-action svc action-name params)]
+            device (store/find-local-device (store/get-dev-id usn))
+            result (store/invoke-action device action-name params)]
         (if result
           (. res (send (msg/emit-control-response svc-type action-name result)))
           (. res (sendStatus 500))))

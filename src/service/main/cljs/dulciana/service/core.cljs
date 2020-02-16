@@ -77,7 +77,8 @@
          :as s}
         (sente-express/make-express-channel-socket-server!
          {:packer :edn
-          :user-id-fn (constantly "DLNA-DB-SERVICE")})]
+          :user-id-fn (constantly "DLNA-DB-SERVICE")
+          :csrf-token-fn nil})]
     (reset! +event-channel+ ch-recv)
     (reset! +event-sender+ send-fn)
     (reset! +event-connections+ connected-uids)
@@ -115,8 +116,8 @@
               (. res (send (pr-str (filter-pending (@store/+remote-services+ (.-svcid (.-params req)))))))))
       (.ws "/api/upnp/updates"
            (fn [ws req next]
-             ((:ajax-get-or-ws-handshake-fn event-mgr) req nil nil{:websocket? true
-                                                                :websocket ws})))
+             ((:ajax-get-or-ws-handshake-fn event-mgr) req nil nil {:websocket? true
+                                                                    :websocket ws})))
       (.get "/api/upnp/updates"
             (fn [req res]
               (. res (set "Content-Type" "application/edn"))
@@ -138,7 +139,6 @@
   (events/channel-driver ch hndlr))
 
 (defn sente-event-handler [msg]
-  (log/info "Received WS msg" (:event msg))
   (let [[evt-type args] (:event msg)]
     (if (= evt-type :dulciana/invoke-action)
       (let [{:keys [device service action form]} (:data args)]
@@ -147,7 +147,6 @@
                                                    action
                                                    form)
                      (fn [response]
-                       (log/info response)
                        (when (:?reply-fn msg)
                          ((:?reply-fn msg) {:device device
                                             :service service

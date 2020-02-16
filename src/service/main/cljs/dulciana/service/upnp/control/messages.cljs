@@ -14,7 +14,7 @@
   ""
   [msg]
   (dulc-xml/munge-namespaces
-   (xml/xml->clj msg) {}))
+   (xml/xml->clj (.toString msg)) {}))
 
 (defn control-response-parse
   ""

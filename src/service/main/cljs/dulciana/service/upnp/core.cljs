@@ -25,6 +25,7 @@
   (when (config/get-value :dulciana-upnp-server-enable)
     (let [upnp-app (express)]
       (doto upnp-app
+        (.use "/" (express/raw #js{:type (constantly true)}))
         (.get "/upnp/devices/:devid/devdesc.xml"
               description/handle-dev-desc-request)
         (.get "/upnp/services/:usn/scpd.xml"
@@ -43,25 +44,27 @@
   (when @+upnp-http-server+
     (.close @+upnp-http-server+)))
  
-(defn register-device [device-descriptor]
-  (swap! store/+local-devices+ assoc (:udn device-descriptor) device-descriptor)
-  (discovery/queue-device-announcements :notify device-descriptor nil))
+(defn register-device [device-instance]
+  (swap! store/+local-devices+ assoc (:udn (store/get-descriptor device-instance)) device-instance)
+  (discovery/queue-device-announcements :notify (store/get-descriptor device-instance) nil))
 
 (defn deregister-devices [devid]
   (when-let [device (@store/+local-devices+ devid)]
     (swap! store/+local-devices+ dissoc devid)
-    (discovery/queue-device-announcements :goodbye device nil)))
+    (discovery/queue-device-announcements :goodbye (store/get-descriptor device) nil)))
 
 (defn start-upnp-services []
   (start-upnp-http-server!)
   (discovery/start-listeners)
   (discovery/start-notifications)
+  (discovery/start-announcement-queue-processor)
   (description/start-listeners)
   (eventing/start-event-server))
 
 (defn stop-upnp-services []
   (eventing/stop-event-server)
   (description/stop-listeners)
+  (discovery/stop-announcement-queue-processor)
   (discovery/stop-notifications)
   (discovery/stop-listeners)
   (stop-upnp-http-server!))

@@ -58,27 +58,27 @@
                   :specVersion {:minor "0", :major "2"}})
 
 (def sample-device (store/map->device {:boot-id "boot-id"
-                                           :config-id "config-id"
-                                           :device-list "device-list"
-                                           :device-type "device-type"
-                                           :friendly-name "friendly-name"
-                                           :icon-list [(store/map->icon
-                                                        {:mime-type "mime-type"
-                                                         :depth "depth"
-                                                         :height "height"
-                                                         :width "width"
-                                                         :url "url"})]
-                                           :manufacturer "manufacturer"
-                                           :manufacturer-url "manufacturer-url"
-                                           :model-description "model-description"
-                                           :model-name "model-name"
-                                           :model-url "model-url"
-                                           :presentation-url "presentation-url"
-                                           :serial-number "serial-number"
-                                           :service-list [sample-service]
-                                           :udn "udn"
-                                           :upc "upc"
-                                           :version "version"}))
+                                       :config-id "config-id"
+                                       :device-list "device-list"
+                                       :device-type "device-type"
+                                       :friendly-name "friendly-name"
+                                       :icon-list [(store/map->icon
+                                                    {:mime-type "mime-type"
+                                                     :depth "depth"
+                                                     :height "height"
+                                                     :width "width"
+                                                     :url "url"})]
+                                       :manufacturer "manufacturer"
+                                       :manufacturer-url "manufacturer-url"
+                                       :model-description "model-description"
+                                       :model-name "model-name"
+                                       :model-url "model-url"
+                                       :presentation-url "presentation-url"
+                                       :serial-number "serial-number"
+                                       :service-list [sample-service]
+                                       :udn "udn"
+                                       :upc "upc"
+                                       :version "version"}))
 
 (def dd-result {:device
              {:modelDescription "model-description",
@@ -94,8 +94,8 @@
               :deviceType "device-type",
               :manufacturer "manufacturer",
               :serviceList
-              [{:eventSubURL "/upnp/services/udn::service-type/control",
-                 :controlURL "/upnp/services/udn::service-type/eventing",
+              [{:eventSubURL "/upnp/services/udn::service-type/eventing",
+                 :controlURL "/upnp/services/udn::service-type/control",
                  :SCPDURL "/upnp/services/udn::service-type/scpd.xml",
                  :serviceId "service-id",
                  :serviceType "service-type"}],

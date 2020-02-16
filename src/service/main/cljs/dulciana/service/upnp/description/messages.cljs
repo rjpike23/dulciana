@@ -132,8 +132,8 @@
                (emit-xml-parameter "serviceType" service-type)
                (emit-xml-parameter "serviceId" service-id)
                (emit-xml-parameter "SCPDURL" (str "/upnp/services/" usn "/scpd.xml"))
-               (emit-xml-parameter "controlURL" (str "/upnp/services/" usn "/eventing"))
-               (emit-xml-parameter "eventSubURL" (str "/upnp/services/" usn "/control"))
+               (emit-xml-parameter "controlURL" (str "/upnp/services/" usn "/control"))
+               (emit-xml-parameter "eventSubURL" (str "/upnp/services/" usn "/eventing"))
                "</service>"])))
 
 (defn emit-device-descriptor [{boot-id :boot-id

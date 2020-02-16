@@ -13,6 +13,7 @@
             [dulciana.service.core :as core]
             [dulciana.service.events :as event]
             [dulciana.service.config :as config]
+            [dulciana.service.store :as store]
             [dulciana.service.upnp.discovery.core-tests :as discovery-tests]
             [dulciana.service.upnp.discovery.messages-tests :as discovery-msg-tests]
             [dulciana.service.upnp.description.messages-tests :as description-msg-tests]
@@ -74,3 +75,53 @@
                (done))))))
 
 (run-all-tests #"dulciana.*tests")
+
+(def +test-service+ (store/map->service
+                     {:action-list [(store/map->action
+                                     {:argument-list [(store/map->argument
+                                                       {:direction "out"
+                                                        :name "state"
+                                                        :retval true
+                                                        :related-state-variable "stateVar"})]
+                                      :name "increment"})
+                                    (store/map->action
+                                     {:argument-list [(store/map->argument
+                                                       {:direction "out"
+                                                        :name "state"
+                                                        :retval true
+                                                        :related-state-variable "stateVar"})]
+                                      :name "read"})]
+                      :service-id "test-service-id"
+                      :service-state-table [(store/map->service-state-variable
+                                             {:name "stateVar"
+                                              :data-type "int"})]
+                      :service-type "test-service-type"}))
+
+(def +test-descriptor+ (store/map->device
+                        {:boot-id 1
+                         :config-id "123"
+                         :device-list []
+                         :device-type "abc"
+                         :friendly-name "increment service"
+                         :manufacturer "Dulciana"
+                         :manufacturer-url "https://github.com/rjpike23/dulciana"
+                         :model-name "Dulciana DLNA Server"
+                         :model-url "http://huh.com"
+                         :presentation-url "http://nowhere.none/"
+                         :serial-number "000"
+                         :service-list [+test-service+]
+                         :udn "uuid:00000000-0000-0000-0000-000000000000"
+                         :upc "upc"
+                         :version "1.0"}))
+
+(deftype test-device-type [descriptor state]
+  store/upnp-device
+  (get-descriptor [this] descriptor)
+  (get-state-atom [this] state)
+  (invoke-action [this action-name args]
+    (log/info "!! Action invoked !!" action-name)
+    (case action-name
+      "increment" {"state" (swap! state inc)}
+      "read" {"state" @state})))
+
+(def +test-device+ (->test-device-type +test-descriptor+ (atom 0)))

@@ -74,7 +74,7 @@
      timeout
      usn])
 
-(defprotocol upnp-service
+(defprotocol upnp-device
   (get-descriptor [this])
   (get-state-atom [this])
   (invoke-action [this action-name args]))
@@ -151,7 +151,7 @@
   ([devid svc-type]
    (let [dev (find-local-device devid)]
      (when dev
-       (let [svcs (:service-list dev)]
+       (let [svcs (:service-list (get-descriptor dev))]
          (some (fn [svc] (and (= (:service-type svc) svc-type) svc))
                svcs))))))
 
