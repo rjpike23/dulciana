@@ -62,7 +62,7 @@
   (let [fam (.-family (.address socket))
         port (config/get-value :ssdp-mcast-port)
         address (config/get-value [:ssdp-mcast-addresses fam])]
-    (log/info "Sending SSDP message from" (.-address (.address socket)) "to" address ":" port)
+    (log/trace "Sending SSDP message from" (.-address (.address socket)) "to" address ":" port)
     (.send socket message port address)))
 
 (defmulti send-announcement (fn [msg iface] (:type msg)))
@@ -129,7 +129,7 @@
   (async/go-loop []
     (let [ann (async/<! @+announcement-queue+)]
       (when ann
-        (log/info "Announcement" ann)
+        (log/trace "Announcement" ann)
         (doseq [addr (keys @+sockets+)]
           (let [loc (str "http://" addr ":" (config/get-value :dulciana-upnp-server-port) (:location ann))]
             (send-announcement (assoc ann :location loc) (@+sockets+ addr))))))
@@ -174,7 +174,7 @@
 
 (defn process-notification [notification]
   (let [notify-type (-> notification :message :headers :nts)]
-    (log/info "Rcvd" notify-type (-> notification :message :headers :location))
+    (log/trace "Rcvd" notify-type (-> notification :message :headers :location))
     (case notify-type
       "ssdp:alive" (update-announcements store/+announcements+ notification)
       "ssdp:update" (update-announcements store/+announcements+ notification)

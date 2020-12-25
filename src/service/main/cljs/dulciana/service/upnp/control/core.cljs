@@ -32,7 +32,7 @@
       (let [action-name (first elt)
             svc-type (second elt)
             device (store/find-local-device (store/get-dev-id usn))
-            result (store/invoke-action device action-name params)]
+            result (store/invoke-action device usn action-name params)]
         (if result
           (. res (send (msg/emit-control-response svc-type action-name result)))
           (. res (sendStatus 500))))

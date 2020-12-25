@@ -52,7 +52,8 @@
 (defn slurp [out-chan node-stream]
   (let [channels (listen* node-stream [:data :end :error])]
     (async/take! (:end channels)
-                 #(close* channels))
+                 (fn []
+                   (close* channels)))
     (async/take! (:error channels)
                  (fn [[this err]]
                    (close* channels)
@@ -78,7 +79,13 @@
    (doseq [[k v] channels]
      (pump v e k))))
 
-(defn wrap-atom [atom]
+(defn wrap-atom
+  "Watches the provided atom and returns an async/pub which will produce
+  a message whenever the atom is updated. The returned pub has a single
+  topic, :update. The message is a map with 3 keys, :add, :delete and :update.
+  The values of the keys are sets of pairs of the added, deleted and updated
+  entries, respectively."
+  [atom]
   (let [c (async/chan)
         pub (async/pub c (constantly :update))]
     (add-watch atom :db-watcher

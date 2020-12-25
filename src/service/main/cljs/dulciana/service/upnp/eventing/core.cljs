@@ -21,16 +21,21 @@
             [dulciana.service.upnp.eventing.messages :as event-msg]
             [http :as http]))
 
-;;; HTTP server socket for eventing:
-(defonce +event-server+ (atom {}))
+(defonce +event-queue-flag+ (atom false))
 
-(defonce +event-channel+ (atom {}))
+(defonce +sub-event-channel+ (atom {}))
 
-(defonce +event-pub+ (atom {}))
+(defonce +sub-event-pub+ (atom {}))
 
+(defonce +pub-event-channel+ (atom {}))
+
+(defonce +pub-event-mix+ (atom nil))
+
+;;; The following functions handle the case where dulciana is subscribing to
+;;; an external service/device. 
 (defn update-subscription-state [event]
   (let [sid (-> event :message :headers :sid)]
-    (if (@store/+external-subscriptions+ sid)
+    (if (@store/+subscriptions+ sid)
       (do
         ; TODO: dispatch event to service specific handler.
         (when (:ok event)
@@ -57,14 +62,15 @@
     (let [sid (-> msg :message :headers :sid)
           delta-ts (js/parseInt (second (re-matches #"Second-(\d*)"
                                                     (-> msg :message :headers :timeout))))]
-      (update-subscriptions store/+external-subscriptions+
+      (update-subscriptions store/+subscriptions+
                                   {:sid sid
-                                   :expiration (js/Date. (+ (* 1000 delta-ts) (.getTime (js/Date.))))
+                                   :expiration (js/Date. (+ (* 1000 (if (pos? delta-ts) delta-ts 600))
+                                                            (.getTime (js/Date.))))
                                    :dev-id device-id
                                    :svc-id service-id})
       (async/go
-        (async/<! (async/timeout (* 1000 (- delta-ts 60)))) ; resub 60s before expiration.
-        (when (@store/+external-subscriptions+ sid) ; make sure still subbed.
+        (async/<! (async/timeout (* 1000 (- (if (pos? delta-ts) delta-ts 600) 60)))) ; resub 60s before expiration.
+        (when (@store/+subscriptions+ sid) ; make sure still subbed.
           (resubscribe sid))))
     (log/warn "Error (" (-> msg :message :status-code) ":" (-> msg :message :status-message)
               ") received from subscribe request, dev" device-id "svc" service-id)))
@@ -75,7 +81,6 @@
   ([device-id service-id state-var-list]
    (let [svc (store/find-service device-id service-id)
          ann (store/find-announcement device-id)]
-     (log/debug "Subscribe called" svc ann)
      (when (and svc ann)
        (let [c (net/send-subscribe-message ann svc)]
          (async/go
@@ -83,7 +88,7 @@
              (handle-subscribe-response msg device-id service-id))))))))
 
 (defn resubscribe [sub-id]
-  (let [sub (@store/+external-subscriptions+ sub-id)
+  (let [sub (@store/+subscriptions+ sub-id)
         svc (store/find-service (:dev-id sub) (:svc-id sub))
         ann (store/find-announcement (:dev-id sub))]
     (when (and svc ann)
@@ -93,96 +98,123 @@
             (handle-subscribe-response msg (:dev-id sub) (:svc-id sub))))))))
 
 (defn unsubscribe [sub-id]
-  (let [sub (@store/+external-subscriptions+ sub-id)]
-    (net/send-unsubscribe-message (:sid sub)
-                                  (store/find-announcement (:dev-id sub))
-                                  (store/find-service (:dev-id sub) (:svc-id sub)))
-    (remove-subscriptions store/+external-subscriptions+ sub)))
+  (let [sub (@store/+subscriptions+ sub-id)]
+    (when sub
+      (net/send-unsubscribe-message (:sid sub)
+                                    (store/find-announcement (:dev-id sub))
+                                    (store/find-service (:dev-id sub) (:svc-id sub)))
+      (remove-subscriptions store/+subscriptions+ sub))))
 
-;;; Handler for UPNP pub-sub events
+;;; Handler for UPNP events
 (defn respond [response code message]
   (set! (.-statusCode response) code)
   (set! (.-statusMessage response) message)
   (.end response))
 
-(defn validate-subscribe-request [usn statevar timeout callback]
-  (let [svc (store/find-local-service usn)]
-    (when (and svc callback)
-      true)))
-
-(defn handle-subscribe-request [req res]
-  (let [usn (.-usn (.-params req))
-        sid (.get req "SID")]
-    (if sid
-      () ; TODO resubscribe
-      (let [statevar (.get req "STATEVAR") ; TODO subscribe
-            timeout (.get req "TIMEOUT")
-            callback (.get req "CALLBACK")]
-        (if (validate-subscribe-request usn statevar timeout callback)
-          (let [sub (store/create-subscription usn callback statevar (js/Date.) timeout)]
-            (assoc @store/+internal-subscriptions+ (:sid sub) sub)
-            (doto res
-              (.set "DATE" (:timestamp sub))
-              (.set "SERVER" "FreeBSD/11.0 UPnP/2.0 Dulciana/1.0")
-              (.set "SID" (:sid sub))
-              (.set "TIMEOUT" (str "Seconds-" (:timeout sub)))
-              (.set "ACCEPTED-STATEVAR" (str/join "," statevar))))
-          (.sendError res 400))))))
-
-(defn handle-unsubscribe-request [req res]
-  (let [usn (.-usn (.-params req))]
-    (if (store/find-local-service usn)
-      (do
-        (dissoc @store/+internal-subscriptions+ usn)
-        (.sendStatus 200))
-      (.sendStatus 412))))
-
-(defn handle-event-notification [req res]
-  (let [parsed-req (event-msg/event-parse (.-body req))]))
-
 (defn handle-pub-server-request
   "Callback for when a pub-sub data event is received from an active socket."
-  [src request response]
-  (log/debug "Event server received a" (.-method request) "request")
+  [request response]
   (case (.-method request)
-    "NOTIFY" (let [c (async/chan 1 (map (fn [msg]
-                                          {:message {:type :NOTIFY
-                                                     :body msg
-                                                     :headers (js->clj (.-headers request)
-                                                                       :keywordize-keys true)}
-                                           :ok #(respond response 200 "OK")
-                                           :error (partial respond response)})))]
-               (events/slurp c request)
-               (async/pipe c @+event-channel+ false))
+    "NOTIFY" (async/go
+               (respond response 200 "OK")
+               (async/>! @+sub-event-channel+
+                         {:type :NOTIFY
+                          :message {:body (.toString (.-body request))
+                                    :headers (.-headers request)}
+                          :error #(respond response %1 %2)
+                          :ok #(respond response %1 %2)}))
     (do
       (log/warn "Event server ignoring" (.-method request) "request")
       (.writeHead response 405 "Method Not Allowed" (clj->js {"Allow" "NOTIFY"}))
       (.end response "Method not allowed."))))
 
-;;; Fns to manage the HTTP server which supports eventing.
+;;; The remaining functions handle subscription requests to
+;;; dulciana services from external services.
+(defn validate-subscribe-request [usn statevar timeout callback]
+  (let [svc (store/find-local-service usn)]
+    (when (and svc callback)
+      true)))
+
+(defn send-subscribe-response [res pub]
+  (doto res
+    (.set "DATE" (:timestamp pub))
+    (.set "SERVER" "FreeBSD/11.0 UPnP/2.0 Dulciana/1.0")
+    (.set "SID" (:sid pub))
+    (.set "TIMEOUT" (str "Seconds-" (:timeout pub)))
+    (.set "ACCEPTED-STATEVAR" (str/join "," (:statevar pub)))
+    (.sendStatus 200)))
+
+(defn handle-subscribe-request
+  "Cretes a new publication to deliver state change events to."
+  [req res]
+  (let [usn (.-usn (.-params req))
+        timeout (.get req "TIMEOUT")
+        sid (.get req "SID")]
+    (if sid ; resubscribe
+      (let [pub (@store/+publications+ sid)]
+        (when pub
+          (set! (.-timestamp pub) (js/Date.))
+          (set! (.-timeout pub) timeout)
+          (send-subscribe-response res pub)))
+      (let [statevar (.get req "STATEVAR") ; subscribe
+            callback (.get req "CALLBACK")]
+        (if (validate-subscribe-request usn statevar timeout callback)
+          (let [pub (store/create-publication usn callback statevar (js/Date.) timeout)]
+            (swap! store/+publications+ assoc (:sid pub) pub)
+            (send-subscribe-response res pub))
+          (.sendError res 400))))))
+
+(defn handle-unsubscribe-request [req res]
+  (let [sid (.-sid (.-headers req))]
+    (if sid
+      (do
+        (swap! store/+publications+ dissoc sid)
+        (.sendStatus res 200))
+      (.sendStatus res 412))))
+
+(defn strip-callback-url [callback-spec]
+  (subs callback-spec 1 (- (count callback-spec) 1)))
+
+(defn send-event [publication properties]
+  (let [url (strip-callback-url (:callback publication))]
+    (net/send-http-request "NOTIFY" url
+                           {"HOST" "abc"
+                            "CONTENT-TYPE" "text/xml"
+                            "NT" "upnp:event"
+                            "NTS" "upnp:propchange"
+                            "SID" (:sid publication)
+                            "SEQ" (:seq-number publication)}
+                           (event-msg/emit-event properties)
+                           {})))
+
+(defn start-event-queue-processor []
+  (reset! +event-queue-flag+ true)
+  (async/go-loop []
+    (let [evt (async/<! @+pub-event-channel+)]
+      (when evt
+        (doseq [pub (store/find-publications (:usn evt))]
+          (send-event
+           pub
+           (select-keys (:statevar pub) (:update evt)))))
+      (when @+event-queue-flag+
+        (recur)))))
+
+;;; Fns to manage the channels for eventing.
 (defn start-event-server
   ""
   []
-  (reset! +event-channel+ (async/chan 1 (comp (map event-msg/event-parse)
-                                              (map event-msg/event-analyze))))
-  (reset! +event-pub+ (async/pub @+event-channel+ :type))
-  (let [server (.createServer http)
-        evt-channels (events/listen* server ["request" "close"])]
-    (log/info "Starting event server.")
-    (async/go-loop []
-      (let [req (async/<! (:request evt-channels))]
-           (when req
-             (apply handle-pub-server-request req)
-             (recur))))
-    (async/go (async/<! (:close evt-channels))
-        (map async/close! (vals evt-channels))
-        (log/info "Event server closed."))
-    (.listen server net/+event-server-port+)
-    (reset! +event-server+ server)))
+  (reset! +sub-event-channel+ (async/chan 1 (comp (map event-msg/event-parse)
+                                                  (map event-msg/event-analyze))))
+  (events/channel-driver @+sub-event-channel+ (fn [msg]
+                                                ((:ok msg) 200 "OK")))
+  ;(reset! +sub-event-pub+ (async/pub @+sub-event-channel+ :type))
+  (reset! +pub-event-channel+ (async/chan))
+  (reset! +pub-event-mix+ (async/mix @+pub-event-channel+))
+  (start-event-queue-processor))
 
 (defn stop-event-server
   ""
   []
-  (when @+event-server+
-    (.close @+event-server+))
-  (async/close! @+event-channel+))
+  (async/close! @+pub-event-channel+)
+  (async/close! @+sub-event-channel+)
+  (reset! +event-queue-flag+ false))

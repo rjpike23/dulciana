@@ -88,7 +88,7 @@
   (let [express-app (express)
         express-ws-app (express-ws express-app)]
     (doto express-app
-      (.use (express-session #js {:secret "Dulciana-DLNA"
+      (.use (express-session #js {:secret "Dulciana-DLNA" 
                                   :resave true
                                   :cookie {}
                                   :store (.MemoryStore express-session)
@@ -179,11 +179,11 @@
                  (when (not= old new)
                    (send-db-update :dulciana.service/update-services (filter-pending new)))))
     (catch :default e
-      (log/error "Error while starting Dulciana." e))))
+      (log/error "Error while starting Dulciana XXX." e))))
 
 (defn teardown
   ([arg1 arg2]
-   (println "Uncaught Exception!" arg1 arg2)
+   (println "Uncaught Exception XXX!" arg1 arg2)
    (teardown))
   ([]
    (try
@@ -194,7 +194,7 @@
      (when @+http-server+ (.close @+http-server+))
      (when @+event-channel+) (async/close! @+event-channel+)
      (catch :default e
-       (log/error "Error shutting down Dulciana." e)))))
+       (log/error "Error shutting down Dulciana XXX." e)))))
 
 (defn fig-reload-hook []
   (teardown)

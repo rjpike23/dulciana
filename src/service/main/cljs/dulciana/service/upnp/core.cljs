@@ -31,7 +31,7 @@
         (.get "/upnp/services/:usn/scpd.xml"
               description/handle-scpd-request)
         (.notify "/upnp/events"
-                 eventing/handle-event-notification)
+                 eventing/handle-pub-server-request)
         (.subscribe "/upnp/services/:usn/eventing"
                     eventing/handle-subscribe-request)
         (.unsubscribe "/upnp/services/:usn/eventing"
@@ -46,6 +46,9 @@
  
 (defn register-device [device-instance]
   (swap! store/+local-devices+ assoc (:udn (store/get-descriptor device-instance)) device-instance)
+  (let [pub-channel (async/chan)]
+    (async/admix @eventing/+pub-event-mix+ pub-channel)
+    (store/connect-pub-event-channel device-instance pub-channel))
   (discovery/queue-device-announcements :notify (store/get-descriptor device-instance) nil))
 
 (defn deregister-devices [devid]

@@ -6,6 +6,7 @@
 
 (ns dulciana.service.upnp.eventing.messages
   (:require [clojure.string :as str]
+            [taoensso.timbre :as log :include-macros true]
             [tubax.core :as xml]
             [dulciana.service.xml :as dulc-xml]))
 
@@ -21,7 +22,8 @@
 (defn event-analyze [msg]
   (let [m (dulc-xml/munge-namespaces (-> msg :message :body) {})]
     (assoc msg :message {:body (apply merge ((dulc-xml/xml-list
-                                              {["property" "urn:schemas-upnp-org:event-1-0"] (dulc-xml/xml-map {} :include-unspec-elt true)})
+                                              {["property" "urn:schemas-upnp-org:event-1-0"]
+                                               (dulc-xml/xml-map {} :include-unspec-elt true)})
                                              m))
                          :type :NOTIFY
                          :headers (-> msg :message :headers)})))

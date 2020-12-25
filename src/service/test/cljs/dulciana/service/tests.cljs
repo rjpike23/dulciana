@@ -14,9 +14,15 @@
             [dulciana.service.events :as event]
             [dulciana.service.config :as config]
             [dulciana.service.store :as store]
+            [dulciana.service.upnp.core :as upnp-core]
+            [dulciana.service.upnp.control.core :as control]
+            [dulciana.service.upnp.description.core :as desc]
+            [dulciana.service.upnp.discovery.core :as disc]
+            [dulciana.service.upnp.eventing.core :as eventing]
             [dulciana.service.upnp.discovery.core-tests :as discovery-tests]
             [dulciana.service.upnp.discovery.messages-tests :as discovery-msg-tests]
             [dulciana.service.upnp.description.messages-tests :as description-msg-tests]
+            [dulciana.service.upnp.eventing.core-tests :as eventing-tests]
             [cljs.test :refer-macros [async deftest is testing run-all-tests]]
             [events :as node-events]))
 
@@ -114,14 +120,62 @@
                          :upc "upc"
                          :version "1.0"}))
 
-(deftype test-device-type [descriptor state]
+
+(def +test-service-usn+ "uuid:00000000-0000-0000-0000-000000000000::test-service-type")
+
+(def +test-service-state+ (atom {"state" 0}))
+
+(defn atom-update-to-event [upd]
+  {:update (:update upd)
+   :usn +test-service-usn+})
+
+(deftype test-device-type [descriptor state ^:mutable event-pub ^:mutable event-channel]
   store/upnp-device
   (get-descriptor [this] descriptor)
-  (get-state-atom [this] state)
-  (invoke-action [this action-name args]
-    (log/info "!! Action invoked !!" action-name)
+  (connect-pub-event-channel [this channel]
+    (if (not (and event-pub event-channel))
+      (do
+        (set! event-pub (event/wrap-atom +test-service-state+))
+        (set! event-channel (async/sub event-pub :update
+                                       (async/chan 1 (map atom-update-to-event))))
+        (async/pipe event-channel
+                    channel false))))
+  (disconnect-pub-event-channel [this]
+    (event/unwrap-atom state)
+    (async/close! event-channel)
+    (set! event-pub nil)
+    (set! event-channel nil))
+  (invoke-action [this usn action-name args]
     (case action-name
-      "increment" {"state" (swap! state inc)}
-      "read" {"state" @state})))
+      "increment" (swap! state update-in ["state"] inc)
+      "read" {"state" (@state "state")})))
 
-(def +test-device+ (->test-device-type +test-descriptor+ (atom 0)))
+(def +test-device+ (->test-device-type +test-descriptor+ +test-service-state+ nil nil))
+
+(defn register-test-device []
+  (upnp-core/register-device +test-device+))
+
+(defn deregister-test-device []
+  (upnp-core/deregister-devices (:udn (store/get-descriptor +test-device+))))
+
+(defn control-test-device []
+  (store/invoke-action +test-device+ +test-service-usn+ "increment" {}))
+
+(defn subscribe-test-device []
+  (eventing/subscribe "uuid:00000000-0000-0000-0000-000000000000" "test-service-id"))
+
+(defn unsubscribe-test-device []
+  (let [subs (store/find-publications +test-service-usn+)]
+    (doseq [s subs]
+      (eventing/unsubscribe (:sid s)))))
+
+(defonce +pub-sub-event-log-channel+ (atom nil))
+
+(defn log-pub-sub-events []
+  (reset! +pub-sub-event-log-channel+ (async/chan))
+  (async/sub @eventing/+sub-event-pub+ :NOTIFY @+pub-sub-event-log-channel+)
+  (event/channel-driver @+pub-sub-event-log-channel+
+                        (fn [msg] (log/info "Pub-sub event recvd:" msg))))
+
+(defn unlog-pub-sub-events []
+  (async/unsub @eventing/+sub-event-pub+ :NOTIFY @+pub-sub-event-log-channel+))

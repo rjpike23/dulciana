@@ -85,7 +85,9 @@
                                                          :headers (js->clj (.-headers res) :keywordize-keys true)}
                                                :opts options
                                                :rcvd (js/Date.)})))))
-     (.end req body)
+     (when body
+       (.write req body))
+     (.end req)
      result-chan)))
 
 (defn send-subscribe-message
@@ -95,10 +97,9 @@
   (let [req-url (url/URL. (url/resolve (-> announcement :message :headers :location)
                                        (:eventSubURL service)))
         return-url (str "http://"
-                        (config/get-value :dulciana-upnp-server-port) ":" +event-server-port+
-                        "/upnp/services/"
-                        (:usn announcement)
-                        "/eventing")]
+                        (:address (second (:local announcement)))
+                        ":" (config/get-value :dulciana-upnp-server-port)
+                        "/upnp/events")]
      (send-http-request "SUBSCRIBE"
                        (.-hostname req-url)
                        (.-port req-url)

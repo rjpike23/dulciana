@@ -66,22 +66,24 @@
      upc
      version])
 
-(defrecord subscription
+(defrecord publication
     [callback
      sid
      statevar
      timestamp
      timeout
-     usn])
+     usn
+     seq-number])
 
 (defprotocol upnp-device
   (get-descriptor [this])
-  (get-state-atom [this])
-  (invoke-action [this action-name args]))
+  (connect-pub-event-channel [this channel])
+  (disconnect-pub-event-channel [this])
+  (invoke-action [this usn action-name args]))
 
-(defonce +external-subscriptions+ (atom {}))
+(defonce +publications+ (atom {}))
 
-(defonce +internal-subscriptions+ (atom {}))
+(defonce +subscriptions+ (atom {}))
 
 ;;; A map of all received announcements.
 (defonce +announcements+ (atom {}))
@@ -155,10 +157,25 @@
          (some (fn [svc] (and (= (:service-type svc) svc-type) svc))
                svcs))))))
 
-(defn create-subscription [usn callback statevar timestamp timeout]
-  (->subscription callback
+(defn create-publication [usn callback statevar timestamp timeout]
+  (->publication callback
                   (str "uuid:" (random-uuid))
                   statevar
                   timestamp
                   timeout
-                  usn))
+                  usn
+                  0))
+
+(defn find-publications [usn]
+  (map (fn [[k v]]
+               v)
+       (filter (fn [[k v]]
+                          (= (:usn v) usn))
+               @+publications+)))
+
+(defn find-subscriptions [devid]
+  (map (fn [[k v]]
+         v)
+       (filter (fn [[k v]]
+                 (= (:dev-id v) devid))
+               @+subscriptions+)))
